@@ -1,16 +1,14 @@
-import { supabase } from "../supabase";
+import { pullSecrets } from "./secrets";
 
 export async function exportEnv(
     vault: string,
     opts: { env: string }
 ): Promise<void> {
-    const { data, error } = await supabase()
-        .from("secrets")
-        .select("key,value, envs!inner(name, vaults!inner(name))")
-        .eq("envs.name", opts.env)
-        .eq("envs.vaults.name", vault);
+    const data = await pullSecrets(vault, opts);
 
-    if (error) throw error;
+    if (data.length === 0) return;
 
     console.log(data.map(s => `${s.key}=${s.value}`).join("\n"));
 }
+
+

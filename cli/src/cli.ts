@@ -18,11 +18,11 @@ program
 program.command("init").action(init);
 program.command("login").action(login);
 program.command("list").action(listVaults);
-program.command("env list <vault>").action(listEnvs);
 
-program.command("secrets pull <vault>")
-    .option("--env <env>")
-    .action(pullSecrets);
+const env = program.command("env");
+env.command("list <vault>").action(listEnvs);
+
+
 
 program.command("run <vault>")
     .option("--env <env>")

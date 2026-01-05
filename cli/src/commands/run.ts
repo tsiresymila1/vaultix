@@ -10,12 +10,16 @@ export async function runCommand(
         throw new Error("Missing command to run. Example: vaultix run <vault> --env Development -- node server.js");
     }
 
-    await pullSecrets(vault, opts);
+    const secrets = await pullSecrets(vault, opts);
+
+    // Convert secrets list to an object for process.env
+    const secretEnv = secrets.reduce((acc, s) => ({ ...acc, [s.key]: s.value }), {});
 
     const child = spawn(cmd[0], cmd.slice(1), {
         stdio: "inherit",
-        env: { ...process.env }
+        env: { ...process.env, ...secretEnv }
     });
 
     child.on("exit", (code: number | null) => process.exit(code ?? 0));
 }
+

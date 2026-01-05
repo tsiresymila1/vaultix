@@ -3,12 +3,13 @@ import path from "path";
 import { getSodium } from "./crypto";
 
 export interface VaultixConfig {
-    projectKey: string;
-    publicKey: string;
-    privateKey: string;
+    projectKey?: string;
+    publicKey?: string;
+    privateKey?: string;
     email?: string;
     token?: string;
 }
+
 
 const PROJECT_CONFIG_FILE = path.join(process.cwd(), "vaultix.json");
 const CONFIG_DIR = path.join(process.cwd(), ".vaultix");
