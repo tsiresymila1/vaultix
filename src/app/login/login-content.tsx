@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ export default function LoginPageContent() {
     const [loading, setLoading] = useState(false);
     const { setKeys } = useAuth();
     const router = useRouter();
+    const searchParams = useSearchParams();
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -57,8 +58,15 @@ export default function LoginPageContent() {
 
             setKeys(masterKey, privateKey);
             toast.success("Welcome back to Vaultix");
-            router.push("/vaults");
+
+            const returnTo = searchParams.get("returnTo");
+            if (returnTo) {
+                router.push(returnTo);
+            } else {
+                router.push("/vaults");
+            }
         } catch (error) {
+
             console.error(error)
             const message = error instanceof Error ? error.message : "Invalid credentials";
             toast.error(message);

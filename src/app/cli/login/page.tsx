@@ -45,7 +45,7 @@ function LoginContent() {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white p-4">
             <div className="max-w-md w-full glass p-8 rounded-2xl border border-white/10 text-center">
-                <h1 className="text-2xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                <h1 className="text-2xl font-bold mb-4 bg-gradient-to-r from-green-700 to-purple-500 bg-clip-text text-transparent">
                     Vaultix CLI Login
                 </h1>
                 <p className="text-gray-400">{status}</p>

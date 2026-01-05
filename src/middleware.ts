@@ -39,12 +39,19 @@ export async function middleware(request: NextRequest) {
         request.nextUrl.pathname.startsWith('/register')
 
     if (!user && isProtectedRoute) {
-        return NextResponse.redirect(new URL('/login', request.url))
+        const url = new URL('/login', request.url)
+        url.searchParams.set('returnTo', request.nextUrl.pathname + request.nextUrl.search)
+        return NextResponse.redirect(url)
     }
 
     if (user && isAuthRoute) {
+        const returnTo = request.nextUrl.searchParams.get('returnTo')
+        if (returnTo) {
+            return NextResponse.redirect(new URL(returnTo, request.url))
+        }
         return NextResponse.redirect(new URL('/vaults', request.url))
     }
+
 
     return supabaseResponse
 }
