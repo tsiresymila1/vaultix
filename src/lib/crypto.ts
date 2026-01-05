@@ -1,6 +1,6 @@
 "use client";
 
-import sodium from "libsodium-wrappers";
+import sodium from "libsodium-wrappers-sumo";
 
 /**
  * Initialize sodium and wait for the WASM module to be ready.
@@ -12,7 +12,9 @@ export async function initSodium(): Promise<void> {
 /* ---------- KDF ---------- */
 export async function generateSalt(): Promise<Uint8Array> {
     await sodium.ready;
-    return sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
+    // Fallback to 16 bytes if constant is missing
+    const saltBytes = sodium.crypto_pwhash_SALTBYTES || 16;
+    return sodium.randombytes_buf(saltBytes);
 }
 
 export async function deriveMasterKey(
@@ -20,13 +22,19 @@ export async function deriveMasterKey(
     salt: Uint8Array
 ): Promise<Uint8Array> {
     await sodium.ready;
+    // Fallback constants for Argon2id if missing
+    const keyBytes = sodium.crypto_secretbox_KEYBYTES || 32;
+    const opsLimit = sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE || 2;
+    const memLimit = sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE || 67108864;
+    const alg = sodium.crypto_pwhash_ALG_ARGON2ID13 || 2;
+
     return sodium.crypto_pwhash(
-        sodium.crypto_secretbox_KEYBYTES,
+        keyBytes,
         password,
         salt,
-        sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-        sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-        sodium.crypto_pwhash_ALG_ARGON2ID13
+        opsLimit,
+        memLimit,
+        alg
     );
 }
 
@@ -56,7 +64,8 @@ export async function encryptPrivateKey(
     masterKey: Uint8Array
 ): Promise<EncryptedData> {
     await sodium.ready;
-    const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
+    const nonceBytes = sodium.crypto_secretbox_NONCEBYTES || 24;
+    const nonce = sodium.randombytes_buf(nonceBytes);
     const encrypted = sodium.crypto_secretbox_easy(
         sodium.from_base64(privateKeyBase64),
         nonce,
@@ -85,8 +94,9 @@ export async function decryptPrivateKey(
 /* ---------- VAULT KEY ---------- */
 export async function generateVaultKey(): Promise<string> {
     await sodium.ready;
+    const keyBytes = sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES || 32;
     return sodium.to_base64(
-        sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES)
+        sodium.randombytes_buf(keyBytes)
     );
 }
 
@@ -97,9 +107,8 @@ export async function encryptSecret(
 ): Promise<EncryptedData> {
     await sodium.ready;
     const key = sodium.from_base64(vaultKeyBase64);
-    const nonce = sodium.randombytes_buf(
-        sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
-    );
+    const npubBytes = sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES || 24;
+    const nonce = sodium.randombytes_buf(npubBytes);
     const cipher = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
         plaintext,
         null,
@@ -164,7 +173,7 @@ export async function randomBytes(length: number): Promise<Uint8Array> {
 
 export async function getSaltBytes(): Promise<number> {
     await sodium.ready;
-    return sodium.crypto_pwhash_SALTBYTES;
+    return sodium.crypto_pwhash_SALTBYTES || 16;
 }
 
 export async function toBase64(data: Uint8Array): Promise<string> {

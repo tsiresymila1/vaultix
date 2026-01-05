@@ -1,7 +1,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
     deriveMasterKey,
@@ -11,7 +10,7 @@ import {
     toBase64
 } from "@/lib/crypto";
 import { supabase } from "@/lib/supabase";
-import { ArrowRight, Key, Loader2, Lock, Mail, Shield, Sparkles } from "lucide-react";
+import { Key, Loader2, Shield } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -57,14 +56,15 @@ export default function RegisterPageContent() {
                 masterKey
             );
 
-            // 4. Store user public key and encrypted private key in public.users table
-            const { error: userError } = await supabase.from("users").insert({
-                id: authData.user.id,
-                email: authData.user.email,
-                public_key: keyPair.publicKey,
-                encrypted_private_key: encryptedPrivateKeyResult.cipher,
-                private_key_nonce: encryptedPrivateKeyResult.nonce,
-                master_key_salt: await toBase64(salt),
+            // 4. Store user public key and encrypted private key using secure RPC
+            // This bypasses strict RLS checks that might fail if the session isn't fully established yet (e.g. pending email confirmation)
+            const { error: userError } = await supabase.rpc("register_user_profile", {
+                p_id: authData.user.id,
+                p_email: authData.user.email,
+                p_public_key: keyPair.publicKey,
+                p_encrypted_private_key: encryptedPrivateKeyResult.cipher,
+                p_private_key_nonce: encryptedPrivateKeyResult.nonce,
+                p_master_key_salt: await toBase64(salt),
             });
 
             if (userError) throw userError;
@@ -73,141 +73,115 @@ export default function RegisterPageContent() {
             toast.success("Identity created successfully");
             router.push("/login");
         } catch (error) {
+            console.error("Registration error:", error);
+            // Ensure we don't leave the user in a half-authenticated state
+            // await supabase.auth.signOut();
             const message = error instanceof Error ? error.message : "Registration failed";
             toast.error(message);
         } finally {
             setLoading(false);
         }
     };
-
     return (
-        <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
-            {/* Background Decorative Elements */}
-            <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10">
-                <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/10 rounded-full blur-[120px] animate-pulse" />
-                <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] animate-pulse delay-700" />
-            </div>
-
-            <div className="w-full max-w-lg space-y-8 animate-in fade-in zoom-in duration-700">
-                <div className="text-center space-y-4">
-                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-[2rem] bg-gradient-to-br from-purple-600 to-primary p-0.5 shadow-2xl -rotate-3 hover:rotate-0 transition-transform duration-500">
-                        <div className="w-full h-full bg-background rounded-[1.9rem] flex items-center justify-center">
-                            <Sparkles className="w-10 h-10 text-primary" />
-                        </div>
+        <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-2 xl:min-h-screen">
+            <div className="hidden bg-muted lg:block relative h-full">
+                <div className="absolute inset-0 bg-zinc-900 border-r border-white/10" />
+                <div className="relative h-full flex flex-col justify-between p-10 text-white z-20">
+                    <div className="flex items-center gap-2 text-lg font-medium">
+                        <Shield className="w-6 h-6 text-primary" /> Vaultix
                     </div>
-                    <div>
-                        <h1 className="text-4xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-foreground to-foreground/70">
-                            Create Identity
-                        </h1>
-                        <p className="text-muted-foreground font-medium mt-2">
-                            Initialize your secure cryptographic profile
-                        </p>
+                    <div className="space-y-2 max-w-lg">
+                        <blockquote className="space-y-2">
+                            <p className="text-sm">
+                                {"Security isn't just a feature, it's the foundation. Vaultix gives us the peace of mind we need to move fast without breaking things."}
+                            </p>
+                            <footer className="text-sm text-white/60">Alex Chen, CTO</footer>
+                        </blockquote>
                     </div>
                 </div>
-
-                <Card className="border-border/30 bg-card/30 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl overflow-hidden relative border-t-white/10">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-purple-500/50 to-transparent" />
-
-                    <CardHeader className="p-8 pb-0">
-                        <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-purple-500/70 mb-2">
-                            <Key className="w-3 h-3" />
-                            Cryptographic Setup
+            </div>
+            <div className="flex items-center justify-center py-12 min-h-screen">
+                <div className="mx-auto w-full max-w-[350px] space-y-6">
+                    <div className="text-center space-y-2">
+                        <div className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 mb-2">
+                            <Key className="w-5 h-5 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl font-bold">New Account</CardTitle>
-                        <CardDescription>Setup your master password. This will be used to derive your local keys.</CardDescription>
-                    </CardHeader>
+                        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                            Create an account
+                        </h1>
+                        <p className="text-muted-foreground text-sm">
+                            Initialize your secure cryptographic identity
+                        </p>
+                    </div>
 
-                    <CardContent className="p-8 space-y-5">
-                        <form onSubmit={handleRegister} id="register-form" className="space-y-4">
+                    <form onSubmit={handleRegister} id="register-form" className="space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Email</label>
+                            <Input
+                                type="email"
+                                placeholder="name@example.com"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
+                                required
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4">
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50 ml-1">Work Email</label>
-                                <div className="relative group">
-                                    <Input
-                                        type="email"
-                                        placeholder="you@example.com"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        className="h-12 rounded-2xl bg-background/50 border-border/50 pl-11 focus:ring-primary/20 transition-all font-medium"
-                                        required
-                                    />
-                                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                </div>
+                                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Master Password</label>
+                                <Input
+                                    type="password"
+                                    placeholder="••••••••"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
+                                    required
+                                />
                             </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50 ml-1">Master Password</label>
-                                    <div className="relative group">
-                                        <Input
-                                            type="password"
-                                            placeholder="••••••••"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            className="h-12 rounded-2xl bg-background/50 border-border/50 pl-11 focus:ring-primary/20 transition-all font-medium"
-                                            required
-                                        />
-                                        <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50 ml-1">Confirm</label>
-                                    <div className="relative group">
-                                        <Input
-                                            type="password"
-                                            placeholder="••••••••"
-                                            value={confirmPassword}
-                                            onChange={(e) => setConfirmPassword(e.target.value)}
-                                            className="h-12 rounded-2xl bg-background/50 border-border/50 pl-11 focus:ring-primary/20 transition-all font-medium"
-                                            required
-                                        />
-                                        <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                    </div>
-                                </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Confirm Password</label>
+                                <Input
+                                    type="password"
+                                    placeholder="••••••••"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
+                                    required
+                                />
                             </div>
+                        </div>
 
-                            <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-3">
-                                <Shield className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                                <p className="text-[10px] text-muted-foreground leading-relaxed uppercase tracking-wider font-bold">
-                                    Your password is never sent to our servers in plain text. It is used to generate local keys on this device.
-                                </p>
-                            </div>
-                        </form>
-                    </CardContent>
+                        <div className="rounded-md bg-muted p-3 text-xs text-muted-foreground border border-border">
+                            <p className="font-medium text-foreground mb-1 flex items-center gap-1">
+                                <Shield className="w-3 h-3 text-primary" /> Security Note
+                            </p>
+                            Your master password is used to generate your encryption keys. It is never sent to our servers.
+                        </div>
 
-                    <CardFooter className="p-8 pt-0 flex flex-col gap-6">
                         <Button
                             type="submit"
                             form="register-form"
-                            className="w-full h-12 rounded-2xl font-bold text-lg shadow-xl shadow-primary/20 bg-gradient-to-r from-primary to-purple-600 hover:scale-[1.02] active:scale-95 transition-all group"
+                            className="w-full h-9 rounded-md text-sm font-medium"
                             disabled={loading}
                         >
                             {loading ? (
-                                <div className="flex items-center gap-3">
-                                    <Loader2 className="h-5 w-5 animate-spin" />
-                                    Initializing...
+                                <div className="flex items-center gap-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span>Creating account...</span>
                                 </div>
                             ) : (
-                                <div className="flex items-center gap-2">
-                                    Create Account
-                                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                                </div>
+                                "Create Account"
                             )}
                         </Button>
+                    </form>
 
-                        <div className="text-center">
-                            <p className="text-sm text-muted-foreground">
-                                Already have an account?{" "}
-                                <Link
-                                    href="/login"
-                                    className="text-primary font-bold hover:underline inline-flex items-center gap-1 group"
-                                >
-                                    Log In
-                                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                                </Link>
-                            </p>
-                        </div>
-                    </CardFooter>
-                </Card>
+                    <p className="px-8 text-center text-sm text-muted-foreground">
+                        <Link href="/login" className="hover:text-brand underline underline-offset-4">
+                            Already have an account? Sign in
+                        </Link>
+                    </p>
+                </div>
             </div>
         </div>
     );

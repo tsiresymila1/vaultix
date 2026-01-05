@@ -25,19 +25,25 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-    const { user, signOut } = useAuth();
+    const { user, userData, signOut } = useAuth();
     const pathname = usePathname();
     const router = useRouter();
 
     const navItems = [
         { href: "/vaults", icon: LayoutDashboard, label: "Vaults" },
-        { href: "/members", icon: Users, label: "Members" },
+        {
+            href: "/members",
+            icon: Users,
+            label: "Members",
+            hidden: !userData || (userData.role !== 'admin' && userData.role !== 'moderator')
+        },
         { href: "/profile", icon: UserIcon, label: "Profile" },
         { href: "/settings", icon: Settings, label: "Settings" },
-    ];
+    ].filter(item => !item.hidden);
 
     const handleSignOut = async () => {
         await signOut();
@@ -89,15 +95,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         <div className="flex items-center gap-3 p-2 rounded-md hover:bg-secondary/50 transition-colors">
                             <Avatar className="h-8 w-8 border border-border">
                                 <AvatarFallback className="bg-secondary text-muted-foreground text-xs">
-                                    {user?.email?.[0].toUpperCase()}
+                                    {(userData?.full_name || user?.email)?.[0]?.toUpperCase()}
                                 </AvatarFallback>
                             </Avatar>
                             <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium truncate text-foreground">
-                                    {user?.email?.split('@')[0]}
+                                    {userData?.full_name || user?.email?.split('@')[0]}
                                 </p>
                                 <p className="text-[10px] text-muted-foreground truncate uppercase">
-                                    Free Plan
+                                    {userData?.role || 'Free Plan'}
                                 </p>
                             </div>
                             <Button
@@ -122,13 +128,85 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         </div>
                         <span className="font-bold text-base">Vaultix</span>
                     </Link>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="rounded-md h-9 w-9"
-                    >
-                        <Menu className="h-5 w-5" />
-                    </Button>
+
+                    <Sheet>
+                        <SheetTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="rounded-md h-9 w-9"
+                            >
+                                <Menu className="h-5 w-5" />
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="left" className="w-72 p-0">
+                            <div className="flex flex-col h-full">
+                                <div className="flex items-center h-16 px-6 border-b border-border">
+                                    <Link href="/vaults" className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
+                                            <Shield className="w-5 h-5 text-primary-foreground" />
+                                        </div>
+                                        <span className="text-lg font-bold tracking-tight">
+                                            Vaultix
+                                        </span>
+                                    </Link>
+                                </div>
+
+                                <div className="flex-1 px-3 py-6 space-y-1 overflow-y-auto">
+                                    <div className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+                                        Management
+                                    </div>
+                                    {navItems.map((item) => {
+                                        const active = pathname.startsWith(item.href);
+                                        return (
+                                            <SheetClose asChild key={item.href}>
+                                                <Link href={item.href}>
+                                                    <div className={cn(
+                                                        "flex w-full items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                                                        active
+                                                            ? "bg-secondary text-foreground"
+                                                            : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                                                    )}>
+                                                        <item.icon className={cn(
+                                                            "mr-3 h-4 w-4",
+                                                            active ? "text-primary" : "text-muted-foreground"
+                                                        )} />
+                                                        {item.label}
+                                                    </div>
+                                                </Link>
+                                            </SheetClose>
+                                        );
+                                    })}
+                                </div>
+
+                                <div className="p-4 border-t border-border">
+                                    <div className="flex items-center gap-3 p-2">
+                                        <Avatar className="h-8 w-8 border border-border">
+                                            <AvatarFallback className="bg-secondary text-muted-foreground text-xs">
+                                                {(userData?.full_name || user?.email)?.[0]?.toUpperCase()}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-medium truncate text-foreground">
+                                                {userData?.full_name || user?.email?.split('@')[0]}
+                                            </p>
+                                            <p className="text-[10px] text-muted-foreground truncate uppercase">
+                                                {userData?.role || 'Free Plan'}
+                                            </p>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                                            onClick={handleSignOut}
+                                        >
+                                            <LogOut className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        </SheetContent>
+                    </Sheet>
                 </div>
             </header>
 

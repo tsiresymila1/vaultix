@@ -135,7 +135,7 @@ export default function VaultsPage() {
                     </div>
                     <Button
                         onClick={() => setCreateDialogOpen(true)}
-                        className="rounded-full h-10 px-6 font-semibold text-muted"
+                        className="rounded-md h-10 px-6 font-semibold text-muted"
                     >
                         <Plus className="mr-2 h-4 w-4" />
                         Create New Vault

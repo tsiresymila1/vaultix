@@ -11,7 +11,7 @@ import {
     decryptVaultKeyWithPrivateKey,
     decryptSecret
 } from "./crypto";
-import sodium from "libsodium-wrappers";
+import sodium from "libsodium-wrappers-sumo";
 import * as readline from "readline";
 
 const program = new Command();

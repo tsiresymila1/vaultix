@@ -1,15 +1,96 @@
 "use client";
 
-import { useState } from "react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Button } from "@/components/ui/button";
-import { Settings, Shield, Bell, Moon, Sun, Lock, Terminal, Database, ArrowRight } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/context/auth-context";
+import { supabase } from "@/lib/supabase";
+import { ArrowRight, Bell, Database, Lock, Moon, Settings, Shield, Sun, Terminal } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 export default function SettingsPageContent() {
+    const { user, refreshProfile } = useAuth();
+    const router = useRouter();
     const [darkMode, setDarkMode] = useState(true);
     const [autoLock, setAutoLock] = useState(true);
     const [notifications, setNotifications] = useState(true);
+    const [loading, setLoading] = useState(false);
+
+    const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
+
+
+
+    const loadSettings = async () => {
+        if (!user) return;
+        const { data } = await supabase
+            .from("users")
+            .select("settings")
+            .eq("id", user.id)
+            .single();
+
+        if (data?.settings) {
+            const settings = data.settings;
+            setDarkMode(settings.theme !== 'light');
+            setAutoLock(settings.auto_lock ?? true);
+            setNotifications(settings.email_notifications ?? true);
+        }
+    };
+
+    const updateSettings = async (key: string, value: string | number | boolean | undefined | null) => {
+        if (!user) return;
+
+        // Optimistic Update
+        if (key === 'theme') {
+            const newTheme = value !== 'light';
+            setDarkMode(newTheme);
+            const root = window.document.documentElement;
+            root.classList.remove("light", "dark");
+            root.classList.add(value as string);
+        }
+        if (key === 'auto_lock') setAutoLock(value as boolean);
+        if (key === 'email_notifications') setNotifications(value as boolean);
+
+        const newSettings = {
+            theme: key === 'theme' ? value : (darkMode ? 'dark' : 'light'),
+            auto_lock: key === 'auto_lock' ? value : autoLock,
+            email_notifications: key === 'email_notifications' ? value : notifications
+        };
+
+        try {
+            const { error } = await supabase
+                .from("users")
+                .update({ settings: newSettings })
+                .eq("id", user.id);
+
+            if (error) throw error;
+            await refreshProfile();
+        } catch (error) {
+            console.error("Error updating settings:", error);
+            toast.error("Failed to save settings");
+            // Revert would happen here in a more complex state management
+        }
+    };
+
+    const handlePurgeCache = async () => {
+        try {
+            localStorage.clear();
+            sessionStorage.clear();
+            await supabase.auth.signOut();
+            toast.success("Local cache purged. Redirecting...");
+            router.push("/login");
+        } catch (error) {
+            console.error("Error purging cache:", error);
+        }
+    };
+
+    useEffect(() => {
+        if (user) {
+            loadSettings();
+        }
+    }, [loadSettings, user]);
 
     return (
         <div className="space-y-8 max-w-5xl">
@@ -43,7 +124,10 @@ export default function SettingsPageContent() {
                                     <p className="text-[11px] text-muted-foreground">Toggle between high-contrast and light themes</p>
                                 </div>
                             </div>
-                            <Switch checked={darkMode} onCheckedChange={setDarkMode} />
+                            <Switch
+                                checked={darkMode}
+                                onCheckedChange={(checked) => updateSettings('theme', checked ? 'dark' : 'light')}
+                            />
                         </div>
 
                         <div className="flex items-center justify-between p-4 rounded-md bg-secondary/30 border border-border">
@@ -56,7 +140,10 @@ export default function SettingsPageContent() {
                                     <p className="text-[11px] text-muted-foreground">Get alerted on vault sharing or access attempts</p>
                                 </div>
                             </div>
-                            <Switch checked={notifications} onCheckedChange={setNotifications} />
+                            <Switch
+                                checked={notifications}
+                                onCheckedChange={(checked) => updateSettings('email_notifications', checked)}
+                            />
                         </div>
                     </CardContent>
                 </Card>
@@ -81,7 +168,10 @@ export default function SettingsPageContent() {
                                     <p className="text-[11px] text-muted-foreground">Automatically lock secrets after 15 minutes of inactivity</p>
                                 </div>
                             </div>
-                            <Switch checked={autoLock} onCheckedChange={setAutoLock} />
+                            <Switch
+                                checked={autoLock}
+                                onCheckedChange={(checked) => updateSettings('auto_lock', checked)}
+                            />
                         </div>
 
                         <div className="p-4 rounded-md bg-destructive/[0.02] border border-destructive/20 flex items-center justify-between group">
@@ -94,7 +184,12 @@ export default function SettingsPageContent() {
                                     <p className="text-[11px] text-muted-foreground">Remove all locally stored cryptographic keys from this device</p>
                                 </div>
                             </div>
-                            <Button variant="outline" size="sm" className="rounded-md border-destructive/30 text-destructive font-bold uppercase tracking-widest text-[10px] h-8 hover:bg-destructive hover:text-white transition-all px-4">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPurgeDialogOpen(true)}
+                                className="rounded-md border-destructive/30 text-destructive font-bold uppercase tracking-widest text-[10px] h-8 hover:bg-destructive hover:text-white transition-all px-4"
+                            >
                                 Purge Now
                             </Button>
                         </div>
@@ -133,6 +228,16 @@ export default function SettingsPageContent() {
                     </Card>
                 </div>
             </div>
+
+            <ConfirmDialog
+                open={purgeDialogOpen}
+                onOpenChange={setPurgeDialogOpen}
+                title="Purge Local Cache?"
+                description="This will warn remove all encryption keys stored in your browser. You will need to re-login with your Master Password to access your vaults. This action cannot be undone."
+                confirmText="Purge & Logout"
+                variant="destructive"
+                onConfirm={handlePurgeCache}
+            />
         </div>
     );
 }

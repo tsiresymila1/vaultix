@@ -1,17 +1,14 @@
-import { Outfit, JetBrains_Mono } from "next/font/google";
-import "./globals.css";
-import { AuthProvider } from "@/context/auth-context";
+import { ThemeSynchronizer } from "@/components/shared/theme-synchronizer";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/context/auth-context";
+import { Outfit } from "next/font/google";
+import "./globals.css";
 
 const outfit = Outfit({
   variable: "--font-outfit",
   subsets: ["latin"],
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
-});
 
 
 import type { Metadata } from "next";
@@ -29,9 +26,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${outfit.variable} ${jetbrainsMono.variable} antialiased`}
+        className={`${outfit.className} antialiased`}
       >
         <AuthProvider>
+          <ThemeSynchronizer />
           {children}
           <Toaster position="top-right" />
         </AuthProvider>

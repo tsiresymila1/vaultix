@@ -6,6 +6,17 @@ export interface UserData {
     private_key_nonce: string;
     master_key_salt: string;
     created_at: string;
+    role: "admin" | "moderator" | "user";
+    status: "active" | "restricted" | "banned";
+    full_name: string | null;
+    settings: UserSettings;
+}
+
+export interface UserSettings {
+    theme?: "light" | "dark" | "system";
+    email_notifications?: boolean;
+    auto_lock?: boolean;
+    lock_timeout?: number;
 }
 
 export interface Vault {

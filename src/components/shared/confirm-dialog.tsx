@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { AlertTriangle, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface ConfirmDialogProps {
+export interface ConfirmDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onConfirm: () => void;
