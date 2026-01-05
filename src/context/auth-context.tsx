@@ -17,14 +17,34 @@ interface AuthContextType {
     refreshProfile: () => Promise<void>;
 }
 
+interface AuthProviderProps {
+    children: React.ReactNode;
+    initialUser?: User | null;
+    initialUserData?: UserData | null;
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const [user, setUser] = useState<User | null>(null);
-    const [userData, setUserData] = useState<UserData | null>(null);
-    const [loading, setLoading] = useState(true);
+export function AuthProvider({
+    children,
+    initialUser = null,
+    initialUserData = null
+}: AuthProviderProps) {
+    const [user, setUser] = useState<User | null>(initialUser);
+    const [userData, setUserData] = useState<UserData | null>(initialUserData);
+    const [loading, setLoading] = useState(!initialUser);
     const [masterKey, setMasterKeyState] = useState<Uint8Array | null>(null);
     const [privateKey, setPrivateKeyState] = useState<string | null>(null);
+
+    // Sync state with server-provided props (supports router.refresh())
+    useEffect(() => {
+        setUser(initialUser);
+        if (initialUser) setLoading(false);
+    }, [initialUser]);
+
+    useEffect(() => {
+        setUserData(initialUserData);
+    }, [initialUserData]);
 
     const fetchProfile = async (userId: string) => {
         try {
@@ -38,49 +58,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 console.error('Error fetching profile:', error);
                 return;
             }
-
-            if (data) {
-                if (data.status === 'banned') {
-                    await supabase.auth.signOut();
-                    setUserData(null);
-                    setUser(null);
-                    toast.error("Account suspended. Contact support.");
-                    return;
-                }
-                setUserData(data);
-            }
+            setUserData(data);
         } catch (err) {
             console.error(err);
         }
     };
 
     useEffect(() => {
-        // Initial Session Check
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setUser(session?.user ?? null);
-            if (session?.user) {
-                fetchProfile(session.user.id);
-            } else {
-                setLoading(false);
-            }
-        });
+        // Auth State Listener - strictly for managing session cleanup/discovery
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            const currentUser = session?.user ?? null;
+            setUser(currentUser);
 
-        // Auth State Listener
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            setUser(session?.user ?? null);
-            if (!session) {
+            if (event === 'SIGNED_IN' && session?.user && !userData) {
+                // If we signed in (e.g. from login page) and don't have userData yet, fetch it
+                await fetchProfile(session.user.id);
+            }
+
+            if (event === 'SIGNED_OUT') {
                 setMasterKeyState(null);
                 setPrivateKeyState(null);
                 setUserData(null);
-                setLoading(false);
-            } else {
-                await fetchProfile(session.user.id);
-                setLoading(false);
             }
+
+            setLoading(false);
         });
 
         return () => subscription.unsubscribe();
-    }, []);
+    }, [userData]);
 
     const setKeys = (mk: Uint8Array, pk: string) => {
         setMasterKeyState(mk);
@@ -92,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setMasterKeyState(null);
         setPrivateKeyState(null);
         setUserData(null);
-        localStorage.clear(); // Safety clear
+        localStorage.clear();
     };
 
     const refreshProfile = async () => {

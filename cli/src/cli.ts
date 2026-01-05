@@ -16,7 +16,7 @@ program
     .version("0.1.0");
 
 program.command("init").action(init);
-program.command("login <email>").action(login);
+program.command("login").action(login);
 program.command("list").action(listVaults);
 program.command("env list <vault>").action(listEnvs);
 

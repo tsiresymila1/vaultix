@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { pullSecrets } from "./secrets.js";
+import { pullSecrets } from "./secrets";
 
 export async function runCommand(
     vault: string,

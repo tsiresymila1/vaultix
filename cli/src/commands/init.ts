@@ -1,7 +1,7 @@
-import { generateProjectKey, saveConfig } from "../config";
+import { generateKeys, saveConfig } from "../config";
 
 export async function init(): Promise<void> {
-    const projectKey = await generateProjectKey();
-    saveConfig({ projectKey });
-    console.log("✔ Vaultix initialized");
+    const keys = await generateKeys();
+    saveConfig(keys);
+    console.log("✔ Vaultix initialized (vaultix.json created)");
 }

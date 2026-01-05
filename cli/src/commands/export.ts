@@ -1,4 +1,4 @@
-import { supabase } from "../supabase.js";
+import { supabase } from "../supabase";
 
 export async function exportEnv(
     vault: string,

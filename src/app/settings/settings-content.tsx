@@ -26,21 +26,6 @@ export default function SettingsPageContent({ initialSettings }: SettingsPageCon
 
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
 
-    const loadSettings = async () => {
-        if (!user) return;
-        const { data } = await supabase
-            .from("users")
-            .select("settings")
-            .eq("id", user.id)
-            .single();
-
-        if (data?.settings) {
-            const settings = data.settings as UserSettings;
-            setDarkMode(settings.theme !== 'light');
-            setAutoLock(settings.auto_lock ?? true);
-            setNotifications(settings.email_notifications ?? true);
-        }
-    };
 
     const updateSettings = async (key: string, value: string | number | boolean | undefined | null) => {
         if (!user) return;
@@ -90,7 +75,23 @@ export default function SettingsPageContent({ initialSettings }: SettingsPageCon
     };
 
     useEffect(() => {
+
         if (!initialSettings && user) {
+            const loadSettings = async () => {
+                if (!user) return;
+                const { data } = await supabase
+                    .from("users")
+                    .select("settings")
+                    .eq("id", user.id)
+                    .single();
+
+                if (data?.settings) {
+                    const settings = data.settings as UserSettings;
+                    setDarkMode(settings.theme !== 'light');
+                    setAutoLock(settings.auto_lock ?? true);
+                    setNotifications(settings.email_notifications ?? true);
+                }
+            };
             loadSettings();
         }
     }, [user, initialSettings]);
