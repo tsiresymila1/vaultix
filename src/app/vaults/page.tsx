@@ -1,15 +1,19 @@
-"use client";
+import { createClient } from "@/utils/supabase/server";
+import VaultsPageContent from "./vaults-content";
+import { Vault } from "@/types";
 
-import dynamic from "next/dynamic";
+export default async function VaultsPage() {
+    const supabase = await createClient();
 
+    // Fetch vaults on the server
+    const { data: vaults, error } = await supabase
+        .from("vaults")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-import { PageLoader } from "@/components/shared/page-loader";
+    if (error) {
+        console.error("Error fetching vaults:", error);
+    }
 
-const VaultsPageContent = dynamic(() => import("./vaults-content"), {
-    ssr: false,
-    loading: () => <PageLoader />
-});
-
-export default function VaultsPage() {
-    return <VaultsPageContent />;
+    return <VaultsPageContent initialVaults={(vaults as Vault[]) || []} />;
 }

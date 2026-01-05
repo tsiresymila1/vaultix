@@ -1,18 +1,32 @@
-"use client";
-
-import { PageLoader } from "@/components/shared/page-loader";
-import dynamic from "next/dynamic";
+import { createClient } from "@/utils/supabase/server";
+import ProfilePageContent from "./profile-content";
 import AppShell from "@/components/layout/app-shell";
+import { UserData } from "@/types";
+import { redirect } from "next/navigation";
 
-const ProfilePageContent = dynamic(() => import("./profile-content"), {
-    ssr: false,
-    loading: () => <PageLoader />
-});
+export default async function ProfilePage() {
+    const supabase = await createClient();
 
-export default function ProfilePage() {
+    // Check session
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        redirect("/login");
+    }
+
+    // Fetch user data on the server
+    const { data: userData, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+    if (error) {
+        console.error("Error fetching profile data:", error);
+    }
+
     return (
         <AppShell>
-            <ProfilePageContent />
+            <ProfilePageContent initialUserData={userData as UserData} />
         </AppShell>
     );
 }

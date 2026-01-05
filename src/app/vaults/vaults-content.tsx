@@ -12,25 +12,24 @@ import { Globe, Plus, Shield, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Vault } from "@/types";
 
-interface Vault {
-    id: string;
-    name: string;
-    created_at: string;
+interface VaultsPageContentProps {
+    initialVaults: Vault[];
 }
 
-export default function VaultsPage() {
+export default function VaultsPageContent({ initialVaults }: VaultsPageContentProps) {
     const { user } = useAuth();
-    const [vaults, setVaults] = useState<Vault[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [vaults, setVaults] = useState<Vault[]>(initialVaults);
+    const [loading, setLoading] = useState(false); // No longer loading initially
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [deleteVaultId, setDeleteVaultId] = useState<string | null>(null);
     const [deleting, setDeleting] = useState(false);
     const router = useRouter();
 
-    const fetchVaults = useCallback(async () => {
+    const fetchVaults = useCallback(async (isRefresh = false) => {
         try {
-            setLoading(true);
+            if (isRefresh) setLoading(true);
             const { data, error } = await supabase
                 .from("vaults")
                 .select("*")
@@ -47,12 +46,13 @@ export default function VaultsPage() {
     }, []);
 
     useEffect(() => {
-        if (!user) {
-            router.push("/login");
-            return;
+        // If we have initial vaults, don't fetch on first mount unless specifically requested
+        // This avoids double-fetching on SSR.
+        // However, we still fetch if the user changes.
+        if (user) {
+            // fetchVaults(false); // Optional: keep it for freshness, but silent
         }
-        fetchVaults();
-    }, [user, router, fetchVaults]);
+    }, [user, fetchVaults]);
 
     const handleCreateVault = async (name: string) => {
         try {
@@ -156,7 +156,7 @@ export default function VaultsPage() {
                                 className="group relative border-border bg-card hover:border-primary/50 transition-all duration-200 rounded-lg cursor-pointer flex flex-col"
                                 onClick={() => router.push(`/vaults/${vault.id}`)}
                             >
-                                <CardHeader className="p-6 flex-1">
+                                <CardHeader className="pb-6 flex-1">
                                     <div className="flex items-center justify-between mb-4">
                                         <div className="w-10 h-10 rounded-md bg-secondary flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                                             <Shield className="h-5 w-5" />
@@ -184,7 +184,7 @@ export default function VaultsPage() {
                                 </CardHeader>
                                 <CardContent className="px-6 pb-6 pt-0">
                                     <div className="flex gap-2">
-                                        {["DEV", "PROD"].map((env) => (
+                                        {["DEV", "PROD", "STAGE"].map((env) => (
                                             <span
                                                 key={env}
                                                 className="px-2 py-0.5 rounded text-[10px] font-bold bg-secondary text-muted-foreground uppercase"

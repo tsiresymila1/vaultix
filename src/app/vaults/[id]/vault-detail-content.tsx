@@ -1,74 +1,73 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@/context/auth-context";
-import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-    Plus,
-    Eye,
-    EyeOff,
-    Copy,
-    Trash2,
-    Settings,
-    Users,
-    ChevronLeft,
-    Lock,
-    Key,
-    Activity,
-    Search,
-    RefreshCw
-} from "lucide-react";
-import { toast } from "sonner";
-import {
-    decryptVaultKeyWithPrivateKey,
-    encryptSecret,
-    decryptSecret
-} from "@/lib/crypto";
-import { useRouter } from "next/navigation";
 import AppShell from "@/components/layout/app-shell";
-import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { AddSecretDialog } from "@/components/shared/add-secret-dialog";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { ImportEnvDialog } from "@/components/shared/import-env-dialog";
+import { UnlockVaultDialog } from "@/components/shared/unlock-vault-dialog";
 import { VaultMembersDialog } from "@/components/shared/vault-members-dialog";
 import { VaultSettingsDialog } from "@/components/shared/vault-settings-dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/context/auth-context";
+import {
+    decryptSecret,
+    decryptVaultKeyWithPrivateKey,
+    encryptSecret
+} from "@/lib/crypto";
+import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import {
+    Activity,
+    ChevronLeft,
+    Copy,
+    Eye,
+    EyeOff,
+    Key,
+    Lock,
+    Plus,
+    RefreshCw,
+    Search,
+    Settings,
+    Shield,
+    Trash2,
+    Users
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
-interface Environment {
-    id: string;
-    name: string;
+import { Environment, MemberData, Secret, Vault } from "@/types";
+
+interface VaultDetailContentProps {
+    params: { id: string };
+    initialVault: Vault;
+    initialEnvironments: Environment[];
+    initialSecrets: Secret[];
+    initialMemberData: MemberData | null;
 }
 
-interface Secret {
-    id: string;
-    key: string;
-    encrypted_payload: string;
-    nonce: string;
-    environment_id: string;
-    created_at: string;
-}
-
-interface MemberData {
-    encrypted_vault_key: string;
-    users: {
-        public_key: string;
-    } | null;
-}
-
-export default function VaultDetailContent({ params }: { params: { id: string } }) {
+export default function VaultDetailContent({
+    params,
+    initialVault,
+    initialEnvironments,
+    initialSecrets,
+    initialMemberData
+}: VaultDetailContentProps) {
     const { id } = params;
     const { user, privateKey } = useAuth();
-    const [environments, setEnvironments] = useState<Environment[]>([]);
-    const [secrets, setSecrets] = useState<Secret[]>([]);
-    const [vaultName, setVaultName] = useState("");
+    const [environments, setEnvironments] = useState<Environment[]>(initialEnvironments);
+    const [secrets, setSecrets] = useState<Secret[]>(initialSecrets);
+    const [vaultName, setVaultName] = useState(initialVault.name);
     const [vaultKey, setVaultKeyState] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [activeEnv, setActiveEnv] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [activeEnv, setActiveEnv] = useState<string | null>(initialEnvironments[0]?.id || null);
     const [showValues, setShowValues] = useState<Record<string, boolean>>({});
     const [decryptedSecrets, setDecryptedSecrets] = useState<Record<string, string>>({});
     const [addSecretOpen, setAddSecretOpen] = useState(false);
+    const [importEnvOpen, setImportEnvOpen] = useState(false);
     const [membersOpen, setMembersOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [deleteSecretId, setDeleteSecretId] = useState<string | null>(null);
@@ -76,85 +75,65 @@ export default function VaultDetailContent({ params }: { params: { id: string } 
     const [deletingSecret, setDeletingSecret] = useState(false);
     const [deletingVault, setDeletingVault] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
 
     const router = useRouter();
 
-    const loadVaultData = useCallback(async () => {
+    const fetchVaultData = useCallback(async () => {
         try {
             setLoading(true);
-
-            // 1. Get vault details
-            const { data: vaultInfo } = await supabase
-                .from("vaults")
-                .select("name")
-                .eq("id", id)
-                .single();
+            const { data: vaultInfo } = await supabase.from("vaults").select("name").eq("id", id).single();
             if (vaultInfo) setVaultName(vaultInfo.name);
 
-            // 2. Get environments
-            const { data: envs } = await supabase
-                .from("environments")
-                .select("*")
-                .eq("vault_id", id)
-                .order("name", { ascending: true });
+            const { data: envs } = await supabase.from("environments").select("*").eq("vault_id", id).order("name", { ascending: true });
+            setEnvironments(envs || []);
 
-            const sortedEnvs = envs || [];
-            setEnvironments(sortedEnvs);
-            if (sortedEnvs.length > 0 && !activeEnv) {
-                setActiveEnv(sortedEnvs[0].id);
-            }
-
-            // 3. Get vault key (decrypted)
-            const { data, error: memberError } = await supabase
-                .from("vault_members")
-                .select("encrypted_vault_key, users(public_key)")
-                .eq("vault_id", id)
-                .eq("user_id", user?.id)
-                .single();
-
-            const memberData = data as unknown as MemberData;
-
-            if (memberError || !memberData || !memberData.users) {
-                throw memberError || new Error("User public key not found");
-            }
-
-            const userPublicKey = memberData.users.public_key;
-            const decryptedVK = await decryptVaultKeyWithPrivateKey(
-                memberData.encrypted_vault_key,
-                userPublicKey,
-                privateKey!
-            );
-            setVaultKeyState(decryptedVK);
-
-            // 4. Get secrets
-            const { data: secData } = await supabase
-                .from("secrets")
-                .select("*")
-                .eq("vault_id", id)
-                .order("created_at", { ascending: false });
+            const { data: secData } = await supabase.from("secrets").select("*").eq("vault_id", id).order("created_at", { ascending: false });
             setSecrets(secData || []);
-
         } catch (error) {
-            const message = error instanceof Error ? error.message : "Failed to load vault data";
-            toast.error(message);
+            console.error("Failed to refresh vault data", error);
+            toast.error("Failed to refresh vault data");
         } finally {
             setLoading(false);
         }
-    }, [id, user?.id, privateKey, activeEnv]);
+    }, [id]);
+
+    const [derivingKey, setDerivingKey] = useState(false);
 
     useEffect(() => {
-        if (!user || !privateKey) {
-            router.push("/login");
-            return;
-        }
-        loadVaultData();
-    }, [user, privateKey, loadVaultData, router]);
+        if (!user || !privateKey || !initialMemberData || vaultKey) return;
+
+        const decryptVK = async () => {
+            try {
+                setDerivingKey(true);
+                const userPublicKey = initialMemberData.users?.public_key;
+                if (!userPublicKey) throw new Error("User public key not found");
+
+                const decryptedVK = await decryptVaultKeyWithPrivateKey(
+                    initialMemberData.encrypted_vault_key,
+                    userPublicKey,
+                    privateKey
+                );
+                setVaultKeyState(decryptedVK);
+            } catch (error) {
+                console.error("Decryption error:", error);
+                toast.error("Failed to decrypt vault key. Check your master key.");
+            } finally {
+                setDerivingKey(false);
+            }
+        };
+
+        decryptVK();
+    }, [user, privateKey, initialMemberData, vaultKey]);
 
     const handleAddSecret = async (key: string, value: string) => {
         if (!activeEnv) return;
 
         try {
-            if (!vaultKey) throw new Error("Vault key not loaded");
+            if (!vaultKey) {
+                setUnlockDialogOpen(true);
+                throw new Error("Vault session is locked. Please unlock it first.");
+            }
 
             const { cipher, nonce } = await encryptSecret(value, vaultKey);
 
@@ -176,6 +155,51 @@ export default function VaultDetailContent({ params }: { params: { id: string } 
             toast.success("Secret added successfully");
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to add secret";
+            toast.error(message);
+            throw error;
+        }
+    };
+
+    const handleImportEnv = async (entries: Array<{ key: string; value: string }>) => {
+        if (!activeEnv) return;
+
+        try {
+            if (!vaultKey) {
+                setUnlockDialogOpen(true);
+                throw new Error("Vault session is locked. Please unlock it first.");
+            }
+
+            // Insert sequentially to keep it simple and avoid rate limits.
+            const inserted: Secret[] = [];
+            for (const entry of entries) {
+                const key = entry.key.trim();
+                const value = entry.value;
+                if (!key) continue;
+
+                const { cipher, nonce } = await encryptSecret(value, vaultKey);
+                const { data, error } = await supabase
+                    .from("secrets")
+                    .insert({
+                        vault_id: id,
+                        environment_id: activeEnv,
+                        key,
+                        encrypted_payload: cipher,
+                        nonce,
+                    })
+                    .select()
+                    .single();
+                if (error) throw error;
+                inserted.push(data);
+            }
+
+            if (inserted.length > 0) {
+                setSecrets([...inserted.reverse(), ...secrets]);
+                toast.success(`Imported ${inserted.length} secret(s)`);
+            } else {
+                toast.message("No secrets imported");
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to import .env";
             toast.error(message);
             throw error;
         }
@@ -279,7 +303,18 @@ export default function VaultDetailContent({ params }: { params: { id: string } 
                                 <ChevronLeft className="h-4 w-4" />
                             </Button>
                             <div>
-                                <h1 className="text-xl font-bold text-foreground">{vaultName || "Loading..."}</h1>
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-xl font-bold text-foreground">{vaultName || "Loading..."}</h1>
+                                    <div className={cn(
+                                        "flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-widest",
+                                        vaultKey
+                                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+                                            : "bg-orange-500/10 border-orange-500/20 text-orange-500"
+                                    )}>
+                                        {vaultKey ? <Shield className="h-2.5 w-2.5" /> : <Lock className="h-2.5 w-2.5" />}
+                                        {vaultKey ? "Unlocked" : "Locked"}
+                                    </div>
+                                </div>
                                 <p className="text-xs text-muted-foreground uppercase tracking-widest mt-0.5 font-mono">ID: {id.slice(0, 8)}</p>
                             </div>
                         </div>
@@ -373,17 +408,27 @@ export default function VaultDetailContent({ params }: { params: { id: string } 
                                     />
                                 </div>
                                 <Button
-                                    onClick={() => setAddSecretOpen(true)}
+                                    onClick={() => vaultKey ? setAddSecretOpen(true) : setUnlockDialogOpen(true)}
                                     size="sm"
+                                    disabled={derivingKey}
                                     className="h-9 gap-2 rounded-md font-semibold"
                                 >
-                                    <Plus className="h-3.5 w-3.5" />
-                                    Add Secret
+                                    {derivingKey ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : (vaultKey ? <Plus className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />)}
+                                    {derivingKey ? "Decrypting..." : (vaultKey ? "Add Secret" : "Unlock to Add")}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => vaultKey ? setImportEnvOpen(true) : setUnlockDialogOpen(true)}
+                                    disabled={derivingKey}
+                                    className="h-9 gap-2 rounded-md font-semibold"
+                                >
+                                    {vaultKey ? "Import .env" : "Unlock to Import"}
                                 </Button>
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={loadVaultData}
+                                    onClick={fetchVaultData}
                                     disabled={loading}
                                     className="h-9 w-9 rounded-md text-muted-foreground"
                                 >
@@ -478,6 +523,13 @@ export default function VaultDetailContent({ params }: { params: { id: string } 
                 environmentName={environments.find(e => e.id === activeEnv)?.name || ""}
             />
 
+            <ImportEnvDialog
+                open={importEnvOpen}
+                onOpenChange={setImportEnvOpen}
+                onImport={handleImportEnv}
+                environmentName={environments.find(e => e.id === activeEnv)?.name || ""}
+            />
+
             <ConfirmDialog
                 open={!!deleteSecretId}
                 onOpenChange={(open) => !open && setDeleteSecretId(null)}
@@ -510,7 +562,11 @@ export default function VaultDetailContent({ params }: { params: { id: string } 
                 onUpdateName={handleUpdateVaultName}
                 onDeleteVault={() => setDeleteVaultOpen(true)}
             />
+
+            <UnlockVaultDialog
+                open={unlockDialogOpen}
+                onOpenChange={setUnlockDialogOpen}
+            />
         </AppShell>
     );
 }
-

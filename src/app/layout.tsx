@@ -18,20 +18,24 @@ export const metadata: Metadata = {
   description: "Secure, client-side encrypted secret manager.",
 };
 
+import ProgressBarProvider from "@/components/shared/progress-bar-provider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body
         className={`${outfit.className} antialiased`}
       >
         <AuthProvider>
-          <ThemeSynchronizer />
-          {children}
-          <Toaster position="top-right" />
+          <ProgressBarProvider>
+            <ThemeSynchronizer />
+            {children}
+            <Toaster position="top-right" />
+          </ProgressBarProvider>
         </AuthProvider>
       </body>
     </html>

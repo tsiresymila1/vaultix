@@ -29,12 +29,13 @@ export default function LoginPageContent() {
             });
 
             if (authError) throw authError;
-
+            console.info('Getting user profile ....')
             // Fetch user profile using secure RPC to bypass potential RLS issues
             const { data: userRows, error: userError } = await supabase.rpc("get_my_profile", {
                 p_uid: authData.user.id
             });
 
+            console.info('User profile fetched successfully')
             if (userError) throw userError;
 
             if (!userRows || userRows.length === 0) {

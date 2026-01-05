@@ -31,20 +31,34 @@ Vaultix is a fully zero-knowledge, client-side encrypted secret manager built wi
 3. **Install CLI**:
    ```bash
    sh install.sh
-   # Set environment variables for CLI
-   export VAULTIX_SUPABASE_URL=...
-   export VAULTIX_SUPABASE_ANON_KEY=...
+   # CLI reads Supabase URL/anon key from the repo root `.env` by default
+   # (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)
    ```
 
 ## CLI Usage
 
 ```bash
+# Initialize local CLI config
+vaultix init
+
 # Login
 vaultix login <email>
 
 # Run application with secrets
 vaultix run <vault> --env Production -- node app.js
+
+# Tip: you can also run from source
+cd cli
+npm run build
+node dist/cli.js --help
 ```
+
+## Import secrets from a `.env` into a Vault (Web UI)
+
+Open a vault → select an environment → click **Import .env**.
+
+- You can upload a `.env` file or paste its contents.
+- Vaultix encrypts values client-side and stores them as normal secrets.
 
 ## Security Model
 

@@ -11,17 +11,20 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-export default function SettingsPageContent() {
+import { UserSettings } from "@/types";
+
+interface SettingsPageContentProps {
+    initialSettings: UserSettings | null;
+}
+
+export default function SettingsPageContent({ initialSettings }: SettingsPageContentProps) {
     const { user, refreshProfile } = useAuth();
     const router = useRouter();
-    const [darkMode, setDarkMode] = useState(true);
-    const [autoLock, setAutoLock] = useState(true);
-    const [notifications, setNotifications] = useState(true);
-    const [loading, setLoading] = useState(false);
+    const [darkMode, setDarkMode] = useState(initialSettings?.theme !== 'light' && initialSettings?.theme !== undefined);
+    const [autoLock, setAutoLock] = useState(initialSettings?.auto_lock ?? true);
+    const [notifications, setNotifications] = useState(initialSettings?.email_notifications ?? true);
 
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
-
-
 
     const loadSettings = async () => {
         if (!user) return;
@@ -32,7 +35,7 @@ export default function SettingsPageContent() {
             .single();
 
         if (data?.settings) {
-            const settings = data.settings;
+            const settings = data.settings as UserSettings;
             setDarkMode(settings.theme !== 'light');
             setAutoLock(settings.auto_lock ?? true);
             setNotifications(settings.email_notifications ?? true);
@@ -87,10 +90,10 @@ export default function SettingsPageContent() {
     };
 
     useEffect(() => {
-        if (user) {
+        if (!initialSettings && user) {
             loadSettings();
         }
-    }, [loadSettings, user]);
+    }, [user, initialSettings]);
 
     return (
         <div className="space-y-8 max-w-5xl">

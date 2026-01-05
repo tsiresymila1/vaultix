@@ -1,19 +1,28 @@
-"use client";
-
+import { createClient } from "@/utils/supabase/server";
+import SettingsPageContent from "./settings-content";
 import AppShell from "@/components/layout/app-shell";
-import dynamic from "next/dynamic";
+import { UserSettings } from "@/types";
+import { redirect } from "next/navigation";
 
-import { PageLoader } from "@/components/shared/page-loader";
+export default async function SettingsPage() {
+    const supabase = await createClient();
 
-const SettingsPageContent = dynamic(() => import("./settings-content"), {
-    ssr: false,
-    loading: () => <PageLoader />
-});
+    // Check session
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        redirect("/login");
+    }
 
-export default function SettingsPage() {
+    // Fetch user settings on the server
+    const { data } = await supabase
+        .from("users")
+        .select("settings")
+        .eq("id", user.id)
+        .single();
+
     return (
         <AppShell>
-            <SettingsPageContent />
+            <SettingsPageContent initialSettings={data?.settings as UserSettings} />
         </AppShell>
     );
 }

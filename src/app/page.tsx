@@ -1,10 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Shield, Lock, Share2, Terminal, ArrowRight, Github } from "lucide-react";
+import { useAuth } from "@/context/auth-context";
+import { ArrowRight, Github, Lock, Share2, Shield, Terminal } from "lucide-react";
+import Link from "next/link";
 
 export default function HomePage() {
+  const { user } = useAuth();
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       {/* Header */}
@@ -18,14 +20,20 @@ export default function HomePage() {
           <Link href="#security" className="hover:text-foreground transition-colors">Security</Link>
           <Link href="#cli" className="hover:text-foreground transition-colors">CLI</Link>
         </nav>
-        <div className="flex items-center gap-4">
-          <Link href="/login">
-            <Button variant="ghost" size="sm" className="hidden sm:inline-flex">Sign In</Button>
-          </Link>
-          <Link href="/register">
-            <Button size="sm">Get Started <ArrowRight className="ml-2 w-4 h-4" /></Button>
-          </Link>
-        </div>
+        {user ? (
+          <div className="flex items-center gap-4">
+            <Link href="/vaults">
+              <Button variant="default" size="sm" className="hidden sm:inline-flex">Vaults</Button>
+            </Link>
+          </div>) : (
+          <div className="flex items-center gap-4">
+            <Link href="/login">
+              <Button variant="ghost" size="sm" className="hidden sm:inline-flex">Sign In</Button>
+            </Link>
+            <Link href="/register">
+              <Button size="sm">Get Started <ArrowRight className="ml-2 w-4 h-4" /></Button>
+            </Link>
+          </div>)}
       </header>
 
       <main className="flex-1">

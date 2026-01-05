@@ -20,9 +20,13 @@ import { Ban, CheckCircle, MoreHorizontal, Shield, ShieldCheck, UserCheck, Users
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-export default function MembersPageContent() {
-    const [members, setMembers] = useState<UserData[]>([]);
-    const [loading, setLoading] = useState(true);
+interface MembersPageContentProps {
+    initialMembers: UserData[];
+}
+
+export default function MembersPageContent({ initialMembers }: MembersPageContentProps) {
+    const [members, setMembers] = useState<UserData[]>(initialMembers);
+    const [loading, setLoading] = useState(false);
 
     // Action State
     const [actionUser, setActionUser] = useState<UserData | null>(null);
@@ -32,8 +36,11 @@ export default function MembersPageContent() {
     const [actionLoading, setActionLoading] = useState(false);
 
     useEffect(() => {
-        fetchMembers();
-    }, []);
+        // Only fetch if we don't have members, though SSR should provide them
+        if (members.length === 0) {
+            fetchMembers();
+        }
+    }, [members.length]);
 
     const fetchMembers = async () => {
         try {

@@ -12,13 +12,17 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 
-export default function ProfilePageContent() {
+interface ProfilePageContentProps {
+    initialUserData: UserData | null;
+}
+
+export default function ProfilePageContent({ initialUserData }: ProfilePageContentProps) {
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
-    const [userData, setUserData] = useState<UserData | null>(null);
+    const [userData, setUserData] = useState<UserData | null>(initialUserData);
 
-    const [fullName, setFullName] = useState("");
-    const [email, setEmail] = useState("");
+    const [fullName, setFullName] = useState(initialUserData?.full_name || "");
+    const [email, setEmail] = useState(user?.email || "");
 
     const fetchUserData = useCallback(async () => {
         if (!user) return;
@@ -38,10 +42,11 @@ export default function ProfilePageContent() {
     }, [user]);
 
     useEffect(() => {
-        if (user) {
+        // Redundant fetch on mount skipped due to SSR initialUserData
+        if (!initialUserData && user) {
             fetchUserData();
         }
-    }, [user, fetchUserData]);
+    }, [user, fetchUserData, initialUserData]);
 
     const handleUpdateProfile = async (e: React.FormEvent) => {
         e.preventDefault();

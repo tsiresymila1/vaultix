@@ -2,6 +2,19 @@
 
 # dependencies
 /node_modules
+.env
+.env.*
+.vaultix/
+**/.vaultix/
+cli/dist/
+cli/src/*.js
+cli/src/*.js.map
+cli/src/*.d.ts
+cli/src/*.d.ts.map
+cli/src/commands/*.js
+cli/src/commands/*.js.map
+cli/src/commands/*.d.ts
+cli/src/commands/*.d.ts.map
 /cli/node_modules
 /.pnp
 .pnp.*

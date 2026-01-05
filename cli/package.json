@@ -1,13 +1,13 @@
 {
   "name": "cli",
   "version": "1.0.0",
-  "main": "dist/index.js",
+  "main": "dist/cli.js",
   "bin": {
-    "vaultix": "./dist/index.js"
+    "vaultix": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
-    "start": "ts-node src/index.ts"
+    "start": "ts-node src/cli.ts"
   },
   "keywords": [],
   "author": "",
