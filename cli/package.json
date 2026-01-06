@@ -16,10 +16,10 @@
     ],
     "assets": [],
     "targets": [
-      "node18-linux-x64",
-      "node18-macos-x64",
-      "node18-macos-arm64",
-      "node18-win-x64"
+      "node20-linux-x64",
+      "node20-macos-x64",
+      "node20-macos-arm64",
+      "node20-win-x64"
     ]
   },
   "keywords": [],
@@ -37,7 +37,7 @@
     "@types/libsodium-wrappers": "^0.7.14",
     "@types/libsodium-wrappers-sumo": "^0.7.8",
     "@types/node": "^25.0.3",
-    "pkg": "^5.8.1",
+    "@yao-pkg/pkg": "^6.11.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

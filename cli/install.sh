@@ -68,5 +68,16 @@ chmod +x "$BINARY_NAME"
 echo "Installing to $INSTALL_DIR..."
 mv "$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
 
+# macOS Specific Fixes (Code Signing and Quarantine)
+if [ "$PLATFORM" = "macos" ]; then
+  echo "Applying macOS security fixes..."
+  # Remove quarantine attribute
+  xattr -d com.apple.quarantine "$INSTALL_DIR/$BINARY_NAME" 2>/dev/null || true
+  # Ad-hoc sign the binary (fixes 'killed' error on Apple Silicon)
+  if command -v codesign >/dev/null 2>&1; then
+    codesign -s - --force "$INSTALL_DIR/$BINARY_NAME" 2>/dev/null || true
+  fi
+fi
+
 echo "✔ Vaultix CLI installed successfully!"
 echo "Try running: vaultix --version"
