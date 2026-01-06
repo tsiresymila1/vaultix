@@ -33,7 +33,7 @@ export async function pullSecrets(
         return [];
     }
 
-    const vaultNameOrId = vault || config.vaultName || config.vaultId;
+    const vaultNameOrId = vault || config.vaultId || config.vaultName;
     if (!vaultNameOrId) {
         console.error("No vault specified and no project configuration found. Run `vaultix init` or specify a vault.");
         return [];
