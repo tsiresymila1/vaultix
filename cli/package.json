@@ -7,7 +7,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "pkg": "pkg . --out-path bin --output vaultix",
+    "pkg": "pkg . --output bin/vaultix",
     "start": "ts-node src/cli.ts"
   },
   "pkg": {
