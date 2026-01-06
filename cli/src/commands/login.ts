@@ -26,6 +26,7 @@ export async function login(): Promise<void> {
         const server = http.createServer(async (req, res) => {
             const url = new URL(req.url || "", "http://localhost");
             const token = url.searchParams.get("token");
+            const refreshToken = url.searchParams.get("refresh_token");
             const email = url.searchParams.get("email");
 
             if (token && email) {
@@ -38,6 +39,14 @@ export async function login(): Promise<void> {
                 console.log(`✔ Authenticated as ${email}`);
 
                 try {
+                    // Create minimal session object for storage adapter
+                    const mockSession = {
+                        access_token: token,
+                        refresh_token: refreshToken || "",
+                        user: { email: email }
+                    };
+
+                    // We use the token manually first to fetch user data, before full persistence
                     const supabase = createSupabaseClient(token);
 
                     // Fetch user crypto data
@@ -70,7 +79,8 @@ export async function login(): Promise<void> {
                         token,
                         email,
                         privateKey,
-                        publicKey: userData.public_key
+                        publicKey: userData.public_key,
+                        authSession: mockSession // Save full session for Supabase client
                     });
 
                     console.log(`✔ Logged in and private key successfully decrypted.`);

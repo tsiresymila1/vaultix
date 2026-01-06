@@ -4,6 +4,7 @@ import { init } from "./commands/init";
 import { login } from "./commands/login";
 import { listVaults } from "./commands/list";
 import { listEnvs } from "./commands/env";
+import { logout } from "./commands/logout";
 import { runCommand } from "./commands/run";
 import { exportEnv } from "./commands/export";
 
@@ -16,6 +17,7 @@ program
 
 program.command("init").action(init);
 program.command("login").action(login);
+program.command("logout").action(logout);
 program.command("list").action(listVaults);
 
 const env = program.command("env");

@@ -29,10 +29,12 @@ function LoginContent() {
 
             // Logged in, redirect back to CLI
             const token = session.access_token;
+            const refreshToken = session.refresh_token;
             const email = session.user.email;
 
             const redirectUrl = new URL(callback);
             redirectUrl.searchParams.set("token", token);
+            redirectUrl.searchParams.set("refresh_token", refreshToken);
             redirectUrl.searchParams.set("email", email || "");
 
             setStatus("Redirecting back to CLI...");

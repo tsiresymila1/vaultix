@@ -9,6 +9,7 @@ export interface VaultixConfig {
     email?: string | undefined;
     privateKey?: string | undefined;
     publicKey?: string | undefined;
+    authSession?: Record<string, unknown> | undefined; // Stores full Supabase session
 
     // Project Local Config (Current Project Dir)
     vaultId?: string | undefined;
@@ -64,6 +65,7 @@ export function saveGlobalConfig(config: Partial<VaultixConfig>): void {
         email: config.email ?? existing.email,
         privateKey: config.privateKey ?? existing.privateKey,
         publicKey: config.publicKey ?? existing.publicKey,
+        authSession: config.authSession ?? existing.authSession,
     };
 
     // Remove undefined

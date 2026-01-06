@@ -45,7 +45,21 @@ vaultix init
 
 Select the vault you want to link to this project. This creates a `vaultix.json` configuration file.
 
-### 3. Inject Secrets
+### 3. List Vaults & Environments
+
+View your available vaults:
+
+```bash
+vaultix list
+```
+
+View environments within a specific vault:
+
+```bash
+vaultix env list [vault-name-or-id]
+```
+
+### 4. Inject Secrets
 
 Run your application with secrets injected directly into the environment:
 
@@ -55,16 +69,27 @@ vaultix run -- npm start
 
 # Run with a specific environment
 vaultix run --env Production -- npm run build
+
+# Run using a specific vault (overrides project config)
+vaultix run --vault "My Vault" --env Staging -- ./deploy.sh
 ```
 
 Vaultix fetches the encrypted secrets, decrypts them in memory, and spawns your process with the variables injected. Secrets are **never** written to disk.
 
-### 4. Export Secrets (Optional)
+### 5. Export Secrets (Optional)
 
 If you need a `.env` file for tools that don't support runtime injection:
 
 ```bash
 vaultix export --env Development > .env
+```
+
+### 6. Logout
+
+Remove your local credentials:
+
+```bash
+vaultix logout
 ```
 
 ## 🔐 Security Model
