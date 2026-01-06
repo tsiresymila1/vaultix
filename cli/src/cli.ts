@@ -4,7 +4,6 @@ import { init } from "./commands/init";
 import { login } from "./commands/login";
 import { listVaults } from "./commands/list";
 import { listEnvs } from "./commands/env";
-import { pullSecrets } from "./commands/secrets";
 import { runCommand } from "./commands/run";
 import { exportEnv } from "./commands/export";
 

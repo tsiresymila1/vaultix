@@ -6,7 +6,7 @@ import { createSupabaseClient } from "../supabase";
 import { decryptPrivateKey, deriveMasterKey } from "../crypto";
 
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://vaultix-secure.vercel.app";
 
 async function prompt(question: string): Promise<string> {
     const rl = readline.createInterface({
