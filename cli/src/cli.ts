@@ -21,11 +21,13 @@ program.command("list").action(listVaults);
 const env = program.command("env");
 env.command("list [vault]").action(listEnvs);
 
-program.command("run [vault]")
-    .option("--env <env>")
+program.command("run")
+    .description("Run a command with secrets injected")
+    .argument("<cmd...>", "Command to run")
+    .option("-e, --env <env>", "Environment name")
+    .option("-v, --vault <vault>", "Vault name")
     .allowUnknownOption()
-    .argument("<cmd...>")
-    .action(runCommand);
+    .action((cmd, opts) => runCommand(opts.vault, opts, cmd));
 
 program.command("export [vault]")
     .option("--env <env>")
