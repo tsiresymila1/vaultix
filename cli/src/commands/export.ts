@@ -1,9 +1,10 @@
 import { pullSecrets } from "./secrets";
 
 export async function exportEnv(
-    vault: string,
-    opts: { env: string }
+    vault: string | undefined,
+    opts: { env?: string }
 ): Promise<void> {
+
     const data = await pullSecrets(vault, opts);
 
     if (data.length === 0) return;

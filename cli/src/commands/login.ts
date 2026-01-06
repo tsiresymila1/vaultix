@@ -1,11 +1,11 @@
 import http from "node:http";
 import { exec } from "node:child_process";
 import readline from "node:readline";
-import { saveConfig } from "../config";
+import { saveGlobalConfig } from "../config";
 import { createSupabaseClient } from "../supabase";
 import { decryptPrivateKey, deriveMasterKey } from "../crypto";
 
-const PORT = 3456;
+
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 async function prompt(question: string): Promise<string> {
@@ -24,14 +24,16 @@ async function prompt(question: string): Promise<string> {
 export async function login(): Promise<void> {
     return new Promise((resolve, reject) => {
         const server = http.createServer(async (req, res) => {
-            const url = new URL(req.url || "", `http://localhost:${PORT}`);
+            const url = new URL(req.url || "", "http://localhost");
             const token = url.searchParams.get("token");
             const email = url.searchParams.get("email");
 
             if (token && email) {
                 res.writeHead(200, { "Content-Type": "text/html" });
                 res.end("<h1>Success!</h1><p>You can close this window now. Return to your terminal.</p>");
-                server.close();
+
+                // Allow some time for the response to be sent before closing server
+                setTimeout(() => server.close(), 500);
 
                 console.log(`✔ Authenticated as ${email}`);
 
@@ -64,11 +66,7 @@ export async function login(): Promise<void> {
                         masterKey
                     );
 
-                    // Also need projectKey if we want to follow the current schema
-                    // For now, if projectKey is missing, we might need to fetch it or generate it
-                    // But usually projectKey is tied to the vaultix.json in the repo.
-
-                    saveConfig({
+                    saveGlobalConfig({
                         token,
                         email,
                         privateKey,
@@ -77,18 +75,27 @@ export async function login(): Promise<void> {
 
                     console.log(`✔ Logged in and private key successfully decrypted.`);
                     resolve();
-                } catch (err) {
-                    console.error(`\n❌ Login failed: ${err}`);
+
+                    // Force exit to prevent hanging on lingering handles
+                    setTimeout(() => process.exit(0), 100);
+                } catch (err: unknown) {
+                    const message = err instanceof Error ? err.message : String(err);
+                    console.error(`\n❌ Login failed: ${message}`);
                     reject(err);
+                    process.exit(1);
                 }
+
             } else {
                 res.writeHead(400);
                 res.end("Invalid request");
             }
         });
 
-        server.listen(PORT, () => {
-            const loginUrl = `${APP_URL}/cli/login?callback=http://localhost:${PORT}`;
+        server.listen(0, "localhost", () => {
+            const addr = server.address();
+            const port = typeof addr === "object" && addr ? addr.port : 0;
+            const loginUrl = `${APP_URL}/cli/login?callback=http://localhost:${port}`;
+
             console.log(`Logging in via browser...`);
             console.log(`If the browser doesn't open, visit: ${loginUrl}`);
 

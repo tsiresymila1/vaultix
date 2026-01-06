@@ -20,18 +20,17 @@ program.command("login").action(login);
 program.command("list").action(listVaults);
 
 const env = program.command("env");
-env.command("list <vault>").action(listEnvs);
+env.command("list [vault]").action(listEnvs);
 
-
-
-program.command("run <vault>")
+program.command("run [vault]")
     .option("--env <env>")
     .allowUnknownOption()
     .argument("<cmd...>")
     .action(runCommand);
 
-program.command("export <vault>")
+program.command("export [vault]")
     .option("--env <env>")
     .action(exportEnv);
+
 
 program.parse();

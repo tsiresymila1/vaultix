@@ -2,13 +2,15 @@ import { spawn } from "child_process";
 import { pullSecrets } from "./secrets";
 
 export async function runCommand(
-    vault: string,
-    opts: { env: string },
+    vault: string | undefined,
+    opts: { env?: string },
     cmd: string[]
 ): Promise<void> {
     if (!cmd?.length || !cmd[0]) {
-        throw new Error("Missing command to run. Example: vaultix run <vault> --env Development -- node server.js");
+        console.error("❌ Error: Missing command to run. Example: vaultix run --env Development -- npm start");
+        return;
     }
+
 
     const secrets = await pullSecrets(vault, opts);
 

@@ -1,72 +1,119 @@
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { getSodium } from "./crypto";
 
 export interface VaultixConfig {
-    projectKey?: string;
-    publicKey?: string;
-    privateKey?: string;
-    email?: string;
-    token?: string;
+    // Global User Config (Home Dir)
+    token?: string | undefined;
+    email?: string | undefined;
+    privateKey?: string | undefined;
+    publicKey?: string | undefined;
+
+    // Project Local Config (Current Project Dir)
+    vaultId?: string | undefined;
+    vaultName?: string | undefined;
+    projectKey?: string | undefined; // Legacy/Compatibility
 }
 
-
+const GLOBAL_CONFIG_DIR = path.join(os.homedir(), ".vaultix");
+const GLOBAL_CONFIG_FILE = path.join(GLOBAL_CONFIG_DIR, "config.json");
 const PROJECT_CONFIG_FILE = path.join(process.cwd(), "vaultix.json");
-const CONFIG_DIR = path.join(process.cwd(), ".vaultix");
-const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 
 export function loadConfig(): VaultixConfig {
-    if (!fs.existsSync(CONFIG_FILE)) {
-        throw new Error("Vaultix not initialized. Run `vaultix init`.");
-    }
-    const userConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
+    let config: VaultixConfig = {};
 
-    // Project config should also exist if initialized
+    // 1. Load Global Config
+    if (fs.existsSync(GLOBAL_CONFIG_FILE)) {
+        try {
+            const globalConfig = JSON.parse(fs.readFileSync(GLOBAL_CONFIG_FILE, "utf-8"));
+            config = { ...config, ...globalConfig };
+        } catch (e) {
+            console.error("Warning: Global config file is corrupted.");
+        }
+    }
+
+    // 2. Load Project Config
     if (fs.existsSync(PROJECT_CONFIG_FILE)) {
-        const projectConfig = JSON.parse(fs.readFileSync(PROJECT_CONFIG_FILE, "utf-8"));
-        return { ...userConfig, ...projectConfig };
+        try {
+            const projectConfig = JSON.parse(fs.readFileSync(PROJECT_CONFIG_FILE, "utf-8"));
+            config = { ...config, ...projectConfig };
+        } catch (e) {
+            console.error("Warning: Project config file is corrupted.");
+        }
     }
 
-    return userConfig;
+    return config;
 }
 
-export function saveConfig(config: Partial<VaultixConfig>): void {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
-
-    // Split config into public and private
-    const projectConfig = {
-        projectKey: config.projectKey,
-        publicKey: config.publicKey,
-    };
-
-    const userConfig = {
-        privateKey: config.privateKey,
-        email: config.email,
-        token: config.token,
-        projectKey: config.projectKey, // Keep it here too for convenience? Or just in projectConfig?
-    };
-
-    if (projectConfig.projectKey || projectConfig.publicKey) {
-        fs.writeFileSync(PROJECT_CONFIG_FILE, JSON.stringify(projectConfig, null, 2));
+export function saveGlobalConfig(config: Partial<VaultixConfig>): void {
+    if (!fs.existsSync(GLOBAL_CONFIG_DIR)) {
+        fs.mkdirSync(GLOBAL_CONFIG_DIR, { recursive: true });
     }
 
-    // Load existing user config to merge
-    let currentConfig = {};
-    if (fs.existsSync(CONFIG_FILE)) {
-        currentConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
+    let existing: Partial<VaultixConfig> = {};
+    if (fs.existsSync(GLOBAL_CONFIG_FILE)) {
+        try {
+            existing = JSON.parse(fs.readFileSync(GLOBAL_CONFIG_FILE, "utf-8"));
+        } catch (e) { }
     }
 
-    const finalUserConfig = { ...currentConfig, ...userConfig };
+    // Only save user-related fields to global
+    const toSave: Partial<VaultixConfig> = {
+        token: config.token ?? existing.token,
+        email: config.email ?? existing.email,
+        privateKey: config.privateKey ?? existing.privateKey,
+        publicKey: config.publicKey ?? existing.publicKey,
+    };
 
-    // Remove undefined values
-    Object.keys(finalUserConfig).forEach((key) => {
-        const k = key as keyof typeof finalUserConfig;
-        if (finalUserConfig[k] === undefined) {
-            delete finalUserConfig[k];
+    // Remove undefined
+    Object.keys(toSave).forEach(key => {
+        const k = key as keyof VaultixConfig;
+        if (toSave[k] === undefined) {
+            delete toSave[k];
         }
     });
 
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(finalUserConfig, null, 2));
+    fs.writeFileSync(GLOBAL_CONFIG_FILE, JSON.stringify(toSave, null, 2));
+}
+
+export function saveProjectConfig(config: Partial<VaultixConfig>): void {
+    let existing: Partial<VaultixConfig> = {};
+    if (fs.existsSync(PROJECT_CONFIG_FILE)) {
+        try {
+            existing = JSON.parse(fs.readFileSync(PROJECT_CONFIG_FILE, "utf-8"));
+        } catch (e) { }
+    }
+
+    // Only save project-related fields to local
+    const toSave: Partial<VaultixConfig> = {
+        vaultId: config.vaultId ?? existing.vaultId,
+        vaultName: config.vaultName ?? existing.vaultName,
+        projectKey: config.projectKey ?? existing.projectKey,
+    };
+
+    // Remove undefined
+    Object.keys(toSave).forEach(key => {
+        const k = key as keyof VaultixConfig;
+        if (toSave[k] === undefined) {
+            delete toSave[k];
+        }
+    });
+
+    fs.writeFileSync(PROJECT_CONFIG_FILE, JSON.stringify(toSave, null, 2));
+}
+
+
+/**
+ * @deprecated Use saveGlobalConfig or saveProjectConfig
+ */
+export function saveConfig(config: Partial<VaultixConfig>): void {
+    if (config.token || config.email || config.privateKey || config.publicKey) {
+        saveGlobalConfig(config);
+    }
+    if (config.vaultId || config.vaultName || config.projectKey) {
+        saveProjectConfig(config);
+    }
 }
 
 export async function generateKeys(): Promise<{ publicKey: string; privateKey: string; projectKey: string }> {
@@ -80,3 +127,4 @@ export async function generateKeys(): Promise<{ publicKey: string; privateKey: s
         projectKey: sodium.to_hex(bytes),
     };
 }
+
