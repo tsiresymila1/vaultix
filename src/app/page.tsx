@@ -2,8 +2,10 @@
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
-import { ArrowRight, Github, Lock, Share2, Shield, Terminal } from "lucide-react";
+import { ArrowRight, Check, Copy, Github, Lock, Share2, Shield, Terminal } from "lucide-react";
+import { useState } from "react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -84,6 +86,20 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+        {/* CLI Section */}
+        <section id="cli" className="py-24 px-6 max-w-5xl mx-auto">
+          <div className="flex flex-col items-center text-center space-y-6 mb-12">
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Developer-First CLI</h2>
+            <p className="text-muted-foreground text-lg max-w-2xl">
+              Install our standalone CLI to manage secrets directly from your terminal.
+              Works on macOS, Linux, and Windows.
+            </p>
+          </div>
+
+          <div className="bg-zinc-950 rounded-2xl p-2 shadow-2xl border border-white/10 overflow-hidden">
+            <InstallTerminal />
+          </div>
+        </section>
       </main>
 
       {/* Footer */}
@@ -102,6 +118,73 @@ export default function HomePage() {
   );
 }
 
+function InstallTerminal() {
+  const [os, setOs] = useState<'sh' | 'ps1'>('sh');
+
+  const commands = {
+    sh: "curl -fsSL https://raw.githubusercontent.com/tsiresymila1/vaultix/main/cli/install.sh | sh",
+    ps1: "iwr -useb https://raw.githubusercontent.com/tsiresymila1/vaultix/main/cli/install.ps1 | iex"
+  };
+
+  return (
+    <div className="group">
+      <div className="flex items-center justify-between px-4 py-3 bg-zinc-900/50 border-b border-white/5">
+        <div className="flex items-center gap-4">
+          <div className="flex gap-2 mr-2">
+            <div className="w-3 h-3 rounded-full bg-red-500/20 group-hover:bg-red-500/40 transition-colors" />
+            <div className="w-3 h-3 rounded-full bg-yellow-500/20 group-hover:bg-yellow-500/40 transition-colors" />
+            <div className="w-3 h-3 rounded-full bg-green-500/20 group-hover:bg-green-500/40 transition-colors" />
+          </div>
+          <div className="flex bg-zinc-800/50 rounded-lg p-0.5">
+            <button
+              onClick={() => setOs('sh')}
+              className={cn(
+                "px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-md transition-all",
+                os === 'sh' ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              macOS / Linux
+            </button>
+            <button
+              onClick={() => setOs('ps1')}
+              className={cn(
+                "px-3 py-1 text-[10px] uppercase tracking-wider font-bold rounded-md transition-all",
+                os === 'ps1' ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              Windows
+            </button>
+          </div>
+        </div>
+        <CopyButton text={commands[os]} />
+      </div>
+      <div className="p-6 font-mono text-sm sm:text-base leading-relaxed overflow-x-auto">
+        {os === 'sh' ? (
+          <div className="whitespace-nowrap">
+            <span className="text-green-400">$</span> <span className="text-zinc-300">curl -fsSL</span> <span className="text-blue-400">https://.../install.sh</span> <span className="text-zinc-500">|</span> <span className="text-zinc-300">sh</span>
+            <div className="mt-4 text-zinc-500 opacity-50 select-none">
+              # Detecting OS and Architecture...<br />
+              # Downloading Vaultix CLI for macos-arm64...<br />
+              # Installing to /usr/local/bin...<br />
+              <span className="text-green-500/70">✔ Vaultix CLI installed successfully!</span>
+            </div>
+          </div>
+        ) : (
+          <div className="whitespace-nowrap">
+            <span className="text-blue-400">PS &gt;</span> <span className="text-zinc-300">iwr -useb</span> <span className="text-blue-400">https://.../install.ps1</span> <span className="text-zinc-500">|</span> <span className="text-zinc-300">iex</span>
+            <div className="mt-4 text-zinc-500 opacity-50 select-none">
+              # Detecting latest release...<br />
+              # Downloading Vaultix CLI (x64)...<br />
+              # Updating User PATH...<br />
+              <span className="text-green-500/70">✔ Vaultix CLI installed successfully!</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FeatureCard({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) {
   return (
     <div className="p-6 rounded-xl border border-border/50 bg-background/50 hover:bg-background transition-colors hover:border-primary/20">
@@ -115,3 +198,26 @@ function FeatureCard({ icon, title, description }: { icon: React.ReactNode, titl
     </div>
   );
 }
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      onClick={copy}
+      className="p-1.5 rounded-md hover:bg-white/10 transition-colors text-zinc-500 hover:text-white"
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+    </button>
+  );
+}
+
+
+

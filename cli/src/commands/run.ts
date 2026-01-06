@@ -19,7 +19,8 @@ export async function runCommand(
 
     const child = spawn(cmd[0], cmd.slice(1), {
         stdio: "inherit",
-        env: { ...process.env, ...secretEnv }
+        env: { ...process.env, ...secretEnv },
+        shell: true
     });
 
     child.on("exit", (code: number | null) => process.exit(code ?? 0));
