@@ -57,11 +57,11 @@ export default function VaultDetailContent({
     initialMemberData
 }: VaultDetailContentProps) {
     const { id } = params;
-    const { user, privateKey } = useAuth();
+    const { user, privateKey, vaultKeys, setVaultKey } = useAuth();
     const [environments, setEnvironments] = useState<Environment[]>(initialEnvironments);
     const [secrets, setSecrets] = useState<Secret[]>(initialSecrets);
     const [vaultName, setVaultName] = useState(initialVault.name);
-    const [vaultKey, setVaultKeyState] = useState<string | null>(null);
+    const vaultKey = vaultKeys[id] || null;
     const [loading, setLoading] = useState(false);
     const [activeEnv, setActiveEnv] = useState<string | null>(initialEnvironments[0]?.id || null);
     const [showValues, setShowValues] = useState<Record<string, boolean>>({});
@@ -76,6 +76,7 @@ export default function VaultDetailContent({
     const [deletingVault, setDeletingVault] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
+    const [userRole, setUserRole] = useState<string | null>(null);
 
     const router = useRouter();
 
@@ -103,6 +104,18 @@ export default function VaultDetailContent({
     useEffect(() => {
         if (!user || !privateKey || !initialMemberData || vaultKey) return;
 
+        const fetchUserRole = async () => {
+            const { data } = await supabase
+                .from("vault_members")
+                .select("role")
+                .eq("vault_id", id)
+                .eq("user_id", user.id)
+                .single();
+            if (data) setUserRole(data.role);
+        };
+
+        fetchUserRole();
+
         const decryptVK = async () => {
             try {
                 setDerivingKey(true);
@@ -114,7 +127,7 @@ export default function VaultDetailContent({
                     userPublicKey,
                     privateKey
                 );
-                setVaultKeyState(decryptedVK);
+                setVaultKey(id, decryptedVK);
             } catch (error) {
                 console.error("Decryption error:", error);
                 toast.error("Failed to decrypt vault key. Check your master key.");
@@ -329,15 +342,18 @@ export default function VaultDetailContent({
                                 <Users className="h-4 w-4" />
                                 <span>Members</span>
                             </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setSettingsOpen(true)}
-                                className="rounded-md h-9 gap-2"
-                            >
-                                <Settings className="h-4 w-4" />
-                                <span>Settings</span>
-                            </Button>
+
+                            {(userRole === 'owner' || userRole === 'moderator') && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setSettingsOpen(true)}
+                                    className="rounded-md h-9 gap-2"
+                                >
+                                    <Settings className="h-4 w-4" />
+                                    <span>Settings</span>
+                                </Button>
+                            )}
                         </div>
                     </div>
 
@@ -553,6 +569,7 @@ export default function VaultDetailContent({
                 onOpenChange={setMembersOpen}
                 vaultId={id}
                 vaultName={vaultName}
+                vaultKey={vaultKey}
             />
 
             <VaultSettingsDialog
@@ -561,6 +578,7 @@ export default function VaultDetailContent({
                 vaultName={vaultName}
                 onUpdateName={handleUpdateVaultName}
                 onDeleteVault={() => setDeleteVaultOpen(true)}
+                userRole={userRole}
             />
 
             <UnlockVaultDialog

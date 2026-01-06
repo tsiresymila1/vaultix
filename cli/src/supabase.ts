@@ -22,19 +22,36 @@ const SUPABASE_ANON_KEY =
     getEnv("VAULTIX_SUPABASE_ANON_KEY", "");
 
 const customStorage = {
-    getItem: (key: string): string | null => {
+    getItem: (_key: string): string | null => {
         try {
             const config = loadConfig();
-            return config.authSession ? JSON.stringify(config.authSession) : null;
+            if (config.authSession) {
+                return JSON.stringify(config.authSession);
+            }
+            // Fallback for legacy token-only config
+            if (config.token) {
+                return JSON.stringify({
+                    access_token: config.token,
+                    refresh_token: "",
+                    user: { email: config.email }
+                });
+            }
+            return null;
         } catch { return null; }
     },
-    setItem: (key: string, value: string): void => {
+    setItem: (_key: string, value: string): void => {
         try {
             const session = JSON.parse(value);
-            saveGlobalConfig({ authSession: session, token: session.access_token });
+            if (session && session.access_token) {
+                saveGlobalConfig({
+                    authSession: session,
+                    token: session.access_token,
+                    email: session.user?.email
+                });
+            }
         } catch { }
     },
-    removeItem: (key: string): void => {
+    removeItem: (_key: string): void => {
         saveGlobalConfig({ authSession: undefined, token: undefined });
     }
 };
@@ -49,8 +66,8 @@ export function createSupabaseClient(token?: string, projectKey?: string): Supab
     return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         auth: {
             storage: customStorage,
-            autoRefreshToken: false,
-            persistSession: false,
+            autoRefreshToken: true,
+            persistSession: true,
             detectSessionInUrl: false
         },
         global: {
@@ -65,13 +82,9 @@ export function createSupabaseClient(token?: string, projectKey?: string): Supab
 export function supabase(): SupabaseClient {
     try {
         const config = loadConfig();
-        // If we have a token but no full session (legacy), we might pass it, 
-        // but ideally we want to use storage.
-        // For now, if we have a legacy flow, we keep passing token if persistSession fails? 
-        // Actually, creating client with storage will try to load from it. 
-        // If config.authSession is missing but config.token exists, we might need to migrate manually or just let it fail/re-login.
-        // Let's stick to standard behavior: if logged in cleanly, authSession exists.
-        return createSupabaseClient(config.token, config.projectKey);
+        // Rely on persistSession/customStorage for auth. 
+        // Passing config.token (which might be expired) in global headers can break token refresh.
+        return createSupabaseClient(undefined, config.projectKey);
     } catch {
         return createSupabaseClient();
     }

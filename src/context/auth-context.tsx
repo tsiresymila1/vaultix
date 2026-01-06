@@ -12,7 +12,9 @@ interface AuthContextType {
     loading: boolean;
     masterKey: Uint8Array | null;
     privateKey: string | null;
+    vaultKeys: Record<string, string>;
     setKeys: (masterKey: Uint8Array, privateKey: string) => void;
+    setVaultKey: (vaultId: string, key: string) => void;
     signOut: () => Promise<void>;
     refreshProfile: () => Promise<void>;
 }
@@ -33,8 +35,33 @@ export function AuthProvider({
     const [user, setUser] = useState<User | null>(initialUser);
     const [userData, setUserData] = useState<UserData | null>(initialUserData);
     const [loading, setLoading] = useState(!initialUser);
+
+    // Crypto session state
     const [masterKey, setMasterKeyState] = useState<Uint8Array | null>(null);
     const [privateKey, setPrivateKeyState] = useState<string | null>(null);
+    const [vaultKeys, setVaultKeys] = useState<Record<string, string>>({});
+
+    // Restore crypto session from sessionStorage on mount
+    useEffect(() => {
+        try {
+            const savedMK = sessionStorage.getItem("vx_mk");
+            const savedPK = sessionStorage.getItem("vx_pk");
+            const savedVK = sessionStorage.getItem("vx_vk");
+
+            if (savedMK && savedPK) {
+                // Decode masterKey from base64
+                const mkArray = new Uint8Array(atob(savedMK).split("").map(c => c.charCodeAt(0)));
+                setMasterKeyState(mkArray);
+                setPrivateKeyState(savedPK);
+            }
+
+            if (savedVK) {
+                setVaultKeys(JSON.parse(savedVK));
+            }
+        } catch (err) {
+            console.error("Failed to restore session from storage", err);
+        }
+    }, []);
 
     // Sync state with server-provided props (supports router.refresh())
     useEffect(() => {
@@ -90,6 +117,27 @@ export function AuthProvider({
     const setKeys = (mk: Uint8Array, pk: string) => {
         setMasterKeyState(mk);
         setPrivateKeyState(pk);
+
+        // Persist to sessionStorage for tab-level persistence
+        try {
+            const b64MK = btoa(String.fromCharCode(...Array.from(mk)));
+            sessionStorage.setItem("vx_mk", b64MK);
+            sessionStorage.setItem("vx_pk", pk);
+        } catch (err) {
+            console.error("Failed to save session keys", err);
+        }
+    };
+
+    const setVaultKey = (vaultId: string, key: string) => {
+        setVaultKeys(prev => {
+            const next = { ...prev, [vaultId]: key };
+            try {
+                sessionStorage.setItem("vx_vk", JSON.stringify(next));
+            } catch (err) {
+                console.error("Failed to save vault keys", err);
+            }
+            return next;
+        });
     };
 
     const signOut = async () => {
@@ -97,7 +145,9 @@ export function AuthProvider({
         setMasterKeyState(null);
         setPrivateKeyState(null);
         setUserData(null);
+        setVaultKeys({});
         localStorage.clear();
+        sessionStorage.clear();
     };
 
     const refreshProfile = async () => {
@@ -111,7 +161,9 @@ export function AuthProvider({
             loading,
             masterKey,
             privateKey,
+            vaultKeys,
             setKeys,
+            setVaultKey,
             signOut,
             refreshProfile
         }}>

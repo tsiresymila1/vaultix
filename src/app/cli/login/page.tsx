@@ -20,22 +20,31 @@ function LoginContent() {
 
             const { data: { session } } = await supabase.auth.getSession();
 
-            if (!session) {
-                // Not logged in, redirect to main login
+            // Check session first, then fallback to URL params
+            const token = session?.access_token || searchParams.get("access_token") || searchParams.get("token");
+            const refreshToken = session?.refresh_token || searchParams.get("refresh_token");
+            const email = session?.user?.email || searchParams.get("email");
+
+            if (!token) {
+                // Not logged in and no tokens in URL, redirect to main login
                 const currentUrl = window.location.href;
                 router.push(`/login?returnTo=${encodeURIComponent(currentUrl)}`);
                 return;
             }
 
             // Logged in, redirect back to CLI
-            const token = session.access_token;
-            const refreshToken = session.refresh_token;
-            const email = session.user.email;
-
             const redirectUrl = new URL(callback);
-            redirectUrl.searchParams.set("token", token);
-            redirectUrl.searchParams.set("refresh_token", refreshToken);
-            redirectUrl.searchParams.set("email", email || "");
+
+            // Forward tokens if we have them
+            if (token && token !== "null") {
+                redirectUrl.searchParams.set("token", token);
+            }
+            if (refreshToken && refreshToken !== "null") {
+                redirectUrl.searchParams.set("refresh_token", refreshToken);
+            }
+            if (email && email !== "null") {
+                redirectUrl.searchParams.set("email", email);
+            }
 
             setStatus("Redirecting back to CLI...");
             window.location.href = redirectUrl.toString();

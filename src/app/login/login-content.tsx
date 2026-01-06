@@ -59,9 +59,47 @@ export default function LoginPageContent() {
             setKeys(masterKey, privateKey);
             toast.success("Welcome back to Vaultix");
 
+            // Explicitly get fresh session to ensure refresh_token is available
+            const { data: { session: freshSession } } = await supabase.auth.getSession();
+            const currentSession = freshSession || authData.session;
+
             const returnTo = searchParams.get("returnTo");
             if (returnTo) {
-                router.push(returnTo);
+                // If it's a CLI login callback, we need to append the session data
+                if (returnTo.includes("callback=")) {
+                    // It's highly likely an API route or another handler
+                    // We append tokens to the returnTo URL so the destination can pick them up
+                    const returnUrl = new URL(returnTo, window.location.href);
+                    // Supabase session tokens - be extremely explicit to avoid passing "null" as a string
+                    const accessToken = currentSession?.access_token || "";
+                    const refreshToken = currentSession?.refresh_token || "";
+                    const userEmail = authData.user?.email || "";
+
+                    if (accessToken) {
+                        returnUrl.searchParams.set("access_token", accessToken);
+                    }
+                    if (refreshToken && refreshToken !== "null") {
+                        returnUrl.searchParams.set("refresh_token", refreshToken);
+                    }
+                    if (userEmail) {
+                        returnUrl.searchParams.set("email", userEmail);
+                    }
+
+                    // For the specific /api/auth/cli case, it expects 'callback' param to be preserved
+                    // which is already in 'returnTo'. The API route logic will grab session from cookie 
+                    // or we can pass it explicitly if we want to be doubly sure, but 
+                    // since we just signed in, the cookie is set. 
+
+                    // HOWEVER, if the downstream is a non-cookie based CLI callback directly (unlikely given previous step),
+                    // we might need to be careful.
+
+                    // The previous step established /api/auth/cli?callback=...
+                    // So we are redirecting to that.
+
+                    router.push(returnUrl.toString());
+                } else {
+                    router.push(returnTo);
+                }
             } else {
                 router.push("/vaults");
             }

@@ -18,6 +18,7 @@ interface VaultSettingsDialogProps {
     vaultName: string;
     onUpdateName: (newName: string) => Promise<void>;
     onDeleteVault: () => void;
+    userRole: string | null;
 }
 
 export function VaultSettingsDialog({
@@ -26,6 +27,7 @@ export function VaultSettingsDialog({
     vaultName,
     onUpdateName,
     onDeleteVault,
+    userRole,
 }: VaultSettingsDialogProps) {
     const [name, setName] = useState(vaultName);
     const [loading, setLoading] = useState(false);
@@ -77,29 +79,31 @@ export function VaultSettingsDialog({
                         </div>
                     </div>
 
-                    <div className="pt-6 border-t border-border space-y-4">
-                        <div className="flex items-center gap-2 text-destructive">
-                            <AlertTriangle className="h-3.5 w-3.5" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Danger Zone</span>
-                        </div>
-                        <div className="p-4 rounded-md bg-destructive/[0.02] border border-destructive/20 flex items-center justify-between group">
-                            <div className="space-y-0.5">
-                                <p className="text-sm font-bold text-destructive">Delete Vault</p>
-                                <p className="text-[10px] text-muted-foreground leading-tight">Permanently remove this vault and all secrets</p>
+                    {userRole === 'owner' && (
+                        <div className="pt-6 border-t border-border space-y-4">
+                            <div className="flex items-center gap-2 text-destructive">
+                                <AlertTriangle className="h-3.5 w-3.5" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest">Danger Zone</span>
                             </div>
-                            <Button
-                                variant="outline"
-                                className="rounded-md border-destructive/30 text-destructive hover:bg-destructive hover:text-white transition-all h-8 px-4 font-bold text-[10px] uppercase tracking-widest"
-                                onClick={() => {
-                                    onOpenChange(false);
-                                    onDeleteVault();
-                                }}
-                            >
-                                <Trash2 className="h-3.5 w-3.5 mr-2" />
-                                Delete
-                            </Button>
+                            <div className="p-4 rounded-md bg-destructive/[0.02] border border-destructive/20 flex items-center justify-between group">
+                                <div className="space-y-0.5">
+                                    <p className="text-sm font-bold text-destructive">Delete Vault</p>
+                                    <p className="text-[10px] text-muted-foreground leading-tight">Permanently remove this vault and all secrets</p>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    className="rounded-md border-destructive/30 text-destructive hover:bg-destructive hover:text-white transition-all h-8 px-4 font-bold text-[10px] uppercase tracking-widest"
+                                    onClick={() => {
+                                        onOpenChange(false);
+                                        onDeleteVault();
+                                    }}
+                                >
+                                    <Trash2 className="h-3.5 w-3.5 mr-2" />
+                                    Delete
+                                </Button>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 <div className="p-4 border-t border-border bg-secondary/10 flex justify-end">

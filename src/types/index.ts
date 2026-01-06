@@ -44,7 +44,6 @@ export interface VaultMember {
     vault_id: string;
     user_id: string;
     encrypted_vault_key: string;
-    key_nonce: string;
     role: "owner" | "admin" | "moderator" | "member";
     users?: {
         email: string;

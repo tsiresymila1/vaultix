@@ -4,9 +4,10 @@ import readline from "node:readline";
 import { saveGlobalConfig } from "../config";
 import { createSupabaseClient } from "../supabase";
 import { decryptPrivateKey, deriveMasterKey } from "../crypto";
+import { Session } from "@supabase/supabase-js";
 
 
-const APP_URL = "https://vaultix-secure.vercel.app";
+const APP_URL = process.env.VAULTIX_APP_URL || "https://vaultix-secure.vercel.app";
 
 async function prompt(question: string): Promise<string> {
     const rl = readline.createInterface({
@@ -31,24 +32,50 @@ export async function login(): Promise<void> {
 
             if (token && email) {
                 res.writeHead(200, { "Content-Type": "text/html" });
-                res.end("<h1>Success!</h1><p>You can close this window now. Return to your terminal.</p>");
+                res.end(`
+                    <html>
+                        <body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #000; color: #fff;">
+                            <h1 style="color: #4ade80;">Success!</h1>
+                            <p>Authenticated successfully. You can close this window now.</p>
+                            <script>
+                                setTimeout(() => {
+                                    window.close();
+                                }, 2000);
+                            </script>
+                        </body>
+                    </html>
+                `);
 
                 // Allow some time for the response to be sent before closing server
                 setTimeout(() => server.close(), 500);
 
                 console.log(`✔ Authenticated as ${email}`);
+                console.log(`\tToken: ${token?.substring(0, 15)}...`);
+                console.log(`\tRefresh Token: ${refreshToken ? "available" : "(none)"}`);
 
                 try {
-                    // Create minimal session object for storage adapter
-                    const mockSession = {
-                        access_token: token,
-                        refresh_token: refreshToken || "",
-                        user: { email: email }
-                    };
+                    let session: Session | null = null;
+                    let supabase = createSupabaseClient();
 
-                    // We use the token manually first to fetch user data, before full persistence
-                    const supabase = createSupabaseClient(token);
+                    // If we have a refresh token, try to establish a proper session
+                    if (refreshToken && refreshToken !== "null") {
+                        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+                            access_token: token,
+                            refresh_token: refreshToken
+                        });
 
+                        if (!sessionError && sessionData.session) {
+                            session = sessionData.session;
+                        } else {
+                            console.warn("Warning: Could not establish a refreshing session. Proceeding with temporary token...");
+                        }
+                    }
+
+                    // If no session established yet, use the access token directly
+                    if (!session) {
+                        supabase = createSupabaseClient(token);
+                    }
+                    console.log("Fecting user crypto data...")
                     // Fetch user crypto data
                     const { data: userData, error: userError } = await supabase
                         .from("users")
@@ -75,12 +102,19 @@ export async function login(): Promise<void> {
                         masterKey
                     );
 
+                    // Final session object to persist
+                    const sessionToSave = session || {
+                        access_token: token,
+                        refresh_token: refreshToken === "null" ? "" : (refreshToken || ""),
+                        user: { email }
+                    };
+
                     saveGlobalConfig({
-                        token,
+                        token: sessionToSave.access_token,
                         email,
                         privateKey,
                         publicKey: userData.public_key,
-                        authSession: mockSession // Save full session for Supabase client
+                        authSession: sessionToSave as unknown as Record<string, unknown>
                     });
 
                     console.log(`✔ Logged in and private key successfully decrypted.`);
@@ -104,7 +138,7 @@ export async function login(): Promise<void> {
         server.listen(0, "localhost", () => {
             const addr = server.address();
             const port = typeof addr === "object" && addr ? addr.port : 0;
-            const loginUrl = `${APP_URL}/cli/login?callback=http://localhost:${port}`;
+            const loginUrl = `${APP_URL}/api/auth/cli?callback=http://localhost:${port}`;
 
             console.log(`Logging in via browser...`);
             console.log(`If the browser doesn't open, visit: ${loginUrl}`);

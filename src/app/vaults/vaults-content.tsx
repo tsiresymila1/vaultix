@@ -13,13 +13,14 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Vault } from "@/types";
+import { cn } from "@/lib/utils";
 
 interface VaultsPageContentProps {
     initialVaults: Vault[];
 }
 
 export default function VaultsPageContent({ initialVaults }: VaultsPageContentProps) {
-    const { user } = useAuth();
+    const { user, setVaultKey } = useAuth();
     const [vaults, setVaults] = useState<Vault[]>(initialVaults);
     const [loading, setLoading] = useState(false); // No longer loading initially
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -92,6 +93,8 @@ export default function VaultsPageContent({ initialVaults }: VaultsPageContentPr
                 { vault_id: vault.id, name: "Production" },
             ]);
 
+            setVaultKey(vault.id, vaultKey);
+
             toast.success("Vault created successfully!");
             fetchVaults();
         } catch (error) {
@@ -161,17 +164,19 @@ export default function VaultsPageContent({ initialVaults }: VaultsPageContentPr
                                         <div className="w-10 h-10 rounded-md bg-secondary flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                                             <Shield className="h-5 w-5" />
                                         </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8 rounded-md hover:bg-destructive/10 hover:text-destructive"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setDeleteVaultId(vault.id);
-                                            }}
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                        {vault.owner_id === user?.id && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 rounded-md hover:bg-destructive/10 hover:text-destructive"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setDeleteVaultId(vault.id);
+                                                }}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        )}
                                     </div>
                                     <div className="space-y-1">
                                         <CardTitle className="text-lg font-bold group-hover:text-primary transition-colors">
@@ -196,7 +201,12 @@ export default function VaultsPageContent({ initialVaults }: VaultsPageContentPr
                                 </CardContent>
                                 <div className="px-6 py-3 border-t border-border bg-secondary/10 flex items-center justify-between rounded-b-lg">
                                     <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Access</span>
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Owner</span>
+                                    <span className={cn(
+                                        "text-[10px] font-bold uppercase tracking-widest",
+                                        vault.owner_id === user?.id ? "text-primary" : "text-muted-foreground"
+                                    )}>
+                                        {vault.owner_id === user?.id ? "Owner" : "Member"}
+                                    </span>
                                 </div>
                             </Card>
                         ))}
