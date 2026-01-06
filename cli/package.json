@@ -14,7 +14,9 @@
     "scripts": [
       "dist/**/*.js"
     ],
-    "assets": [],
+    "assets": [
+      "node_modules/tslib/**/*"
+    ],
     "targets": [
       "node20-linux-x64",
       "node20-macos-x64",
