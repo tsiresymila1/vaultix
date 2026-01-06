@@ -56,7 +56,7 @@ export default function HomePage() {
             <Link href="/register">
               <Button size="lg" className="h-12 px-8 text-base w-full sm:w-auto">Start for free</Button>
             </Link>
-            <Link href="https://github.com/tsiresymila/vaultix" target="_blank">
+            <Link href="https://github.com/tsiresymila1/vaultix" target="_blank">
               <Button variant="outline" size="lg" className="h-12 px-8 text-base w-full sm:w-auto gap-2">
                 <Github className="w-5 h-5" /> View on GitHub
               </Button>

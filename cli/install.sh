@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Vaultix CLI Installer
-# Usage: curl -fsSL https://vaultix.io/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/tsiresymila1/vaultix/main/cli/install.sh | sh
 
 set -e
 
