@@ -7,6 +7,7 @@
 .vaultix/
 **/.vaultix/
 cli/dist/
+cli/bin/
 cli/src/*.js
 cli/src/*.js.map
 cli/src/*.d.ts
@@ -53,3 +54,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+./cli/bin/*
