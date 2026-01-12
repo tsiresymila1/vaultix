@@ -95,7 +95,6 @@ export default function RegisterPageContent() {
                             <p className="text-sm">
                                 {"Security isn't just a feature, it's the foundation. Vaultix gives us the peace of mind we need to move fast without breaking things."}
                             </p>
-                            <footer className="text-sm text-white/60">Alex Chen, CTO</footer>
                         </blockquote>
                     </div>
                 </div>
