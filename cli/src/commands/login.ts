@@ -2,10 +2,10 @@ import http from "node:http";
 import { exec } from "node:child_process";
 import readline from "node:readline";
 import { saveGlobalConfig } from "../config";
-import { createSupabaseClient } from "../supabase";
+import { createSupabaseClient, callCliApi } from "../supabase";
 import { decryptPrivateKey, deriveMasterKey } from "../crypto";
 import { Session } from "@supabase/supabase-js";
-
+import { success, error, info, bold, warn } from "../utils/colors";
 
 const APP_URL = process.env.VAULTIX_APP_URL || "https://vaultix-secure.vercel.app";
 
@@ -49,9 +49,7 @@ export async function login(): Promise<void> {
                 // Allow some time for the response to be sent before closing server
                 setTimeout(() => server.close(), 500);
 
-                console.log(`✔ Authenticated as ${email}`);
-                console.log(`\tToken: ${token?.substring(0, 15)}...`);
-                console.log(`\tRefresh Token: ${refreshToken ? "available" : "(none)"}`);
+                success(`Authenticated as ${bold(email)}`);
 
                 try {
                     let session: Session | null = null;
@@ -67,7 +65,7 @@ export async function login(): Promise<void> {
                         if (!sessionError && sessionData.session) {
                             session = sessionData.session;
                         } else {
-                            console.warn("Warning: Could not establish a refreshing session. Proceeding with temporary token...");
+                            warn("Could not establish a refreshing session. Proceeding with temporary token...");
                         }
                     }
 
@@ -75,26 +73,29 @@ export async function login(): Promise<void> {
                     if (!session) {
                         supabase = createSupabaseClient(token);
                     }
-                    console.log("Fecting user crypto data...")
-                    // Fetch user crypto data
-                    const { data: userData, error: userError } = await supabase
-                        .from("users")
-                        .select("encrypted_private_key, master_key_salt, private_key_nonce, public_key")
-                        .eq("email", email)
-                        .single();
+                    // Save temporary token for API call
+                    saveGlobalConfig({ token: token, email: email });
 
-                    if (userError || !userData) {
-                        throw new Error(`Failed to fetch user data: ${userError?.message || "User not found"}`);
+                    info("Fetching user crypto data via API...");
+                    const { data: userData, error: apiError } = await callCliApi("get-user-crypto");
+
+                    if (apiError || !userData) {
+                        error(`Failed to fetch user data: ${apiError || "User not found"}`);
+                        reject(new Error("User data fetch failed"));
+                        return;
                     }
 
-                    console.log("\nYour private key is encrypted. Please enter your master password to decrypt it.");
+                    console.log(`\n${bold("Private Key Decryption:")}`);
+                    console.log("Your private key is encrypted. Please enter your master password to decrypt it.");
                     const password = await prompt("Master Password: ");
 
                     if (!password) {
-                        throw new Error("Password is required to decrypt your private key.");
+                        error("Password is required to decrypt your private key.");
+                        reject(new Error("Password required"));
+                        return;
                     }
 
-                    console.log("Deriving master key and decrypting private key...");
+                    info("Deriving master key and decrypting private key...");
                     const masterKey = await deriveMasterKey(password, userData.master_key_salt);
                     const privateKey = await decryptPrivateKey(
                         userData.encrypted_private_key,
@@ -117,14 +118,14 @@ export async function login(): Promise<void> {
                         authSession: sessionToSave as unknown as Record<string, unknown>
                     });
 
-                    console.log(`✔ Logged in and private key successfully decrypted.`);
+                    success("Logged in and private key successfully decrypted.");
                     resolve();
 
                     // Force exit to prevent hanging on lingering handles
                     setTimeout(() => process.exit(0), 100);
                 } catch (err: unknown) {
                     const message = err instanceof Error ? err.message : String(err);
-                    console.error(`\n❌ Login failed: ${message}`);
+                    error(`Login failed: ${message}`);
                     reject(err);
                     process.exit(1);
                 }

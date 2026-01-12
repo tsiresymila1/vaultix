@@ -1,6 +1,7 @@
 import { saveProjectConfig, loadConfig } from "../config";
-import { supabase } from "../supabase";
+import { callCliApi } from "../supabase";
 import readline from "node:readline";
+import { success, error, info, bold, colors, warn } from "../utils/colors";
 
 async function prompt(question: string): Promise<string> {
     const rl = readline.createInterface({
@@ -26,41 +27,28 @@ export async function init(): Promise<void> {
     const config = loadConfig();
 
     if (!config.token) {
-        console.error("❌ You must be logged in to initialize a project. Run `vaultix login` first.");
+        error("You must be logged in to initialize a project. Run `vaultix login` first.");
         return;
     }
 
-    const client = supabase();
+    info("Fetching your vaults...");
+    const { data: vaultsData, error: apiError } = await callCliApi("get-user-vaults");
 
-    const userResponse = await client.auth.getUser();
-    const user = userResponse.data.user;
-
-    if (!user) {
-        console.error("❌ Authentication error. Please run `vaultix login` again.");
-        return;
-    }
-
-    console.log("Fetching your vaults...");
-    const { data: vaultsData, error } = await client
-        .from("vault_members")
-        .select("vault_id, vaults(name)")
-        .eq("user_id", user.id);
-
-    if (error) {
-        console.error("❌ Failed to fetch vaults:", error.message);
+    if (apiError) {
+        error(`Failed to fetch vaults: ${apiError}`);
         return;
     }
 
     const vaults = vaultsData as unknown as VaultInfo[];
 
     if (!vaults || vaults.length === 0) {
-        console.log("No vaults found. Please create a vault in the web dashboard first.");
+        warn("No vaults found. Please create a vault in the web dashboard first.");
         return;
     }
 
-    console.log("\nAvailable Vaults:");
+    console.log(`\n${bold("Available Vaults:")}`);
     vaults.forEach((v, i) => {
-        console.log(`${i + 1}. ${v.vaults.name} (${v.vault_id})`);
+        console.log(`  ${colors.fg.cyan}${i + 1}.${colors.reset} ${v.vaults.name} ${colors.dim}(${v.vault_id})${colors.reset}`);
     });
 
     const choice = await prompt(`\nSelect a vault to attach to this project (1-${vaults.length}): `);
@@ -68,7 +56,7 @@ export async function init(): Promise<void> {
     const selected = vaults[index];
 
     if (!selected) {
-        console.error("❌ Invalid selection.");
+        error("Invalid selection.");
         return;
     }
 
@@ -77,8 +65,10 @@ export async function init(): Promise<void> {
         vaultName: selected.vaults.name
     });
 
-    console.log(`\n✔ Project successfully attached to vault: ${selected.vaults.name}`);
-    console.log("✔ vaultix.json created/updated.");
+    console.log("");
+    success(`Project successfully attached to vault: ${bold(selected.vaults.name)}`);
+    success("vaultix.json created/updated.");
+    console.log("");
 }
 
 

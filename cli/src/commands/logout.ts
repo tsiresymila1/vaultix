@@ -1,4 +1,5 @@
 import { saveGlobalConfig } from "../config";
+import { success, error } from "../utils/colors";
 
 export async function logout(): Promise<void> {
     try {
@@ -9,9 +10,10 @@ export async function logout(): Promise<void> {
             email: undefined,
             authSession: undefined, // Clear persistent session
         });
-        console.log("✔ Logged out successfully.");
-    } catch (err) {
-        console.error("❌ Failed to log out:", err);
+        success("Logged out successfully.");
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        error(`Failed to log out: ${message}`);
         process.exit(1);
     }
 }

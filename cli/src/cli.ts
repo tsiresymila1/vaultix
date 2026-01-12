@@ -7,8 +7,19 @@ import { listEnvs } from "./commands/env";
 import { logout } from "./commands/logout";
 import { runCommand } from "./commands/run";
 import { exportEnv } from "./commands/export";
+import { error } from "./utils/colors";
 
 const program = new Command();
+
+process.on("uncaughtException", (err) => {
+    error(err.message || "An unexpected error occurred.");
+    process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+    error(reason instanceof Error ? reason.message : String(reason));
+    process.exit(1);
+});
 
 program
     .name("vaultix")
@@ -34,6 +45,5 @@ program.command("run")
 program.command("export [vault]")
     .option("--env <env>")
     .action(exportEnv);
-
 
 program.parse();

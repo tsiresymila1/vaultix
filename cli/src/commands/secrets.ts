@@ -1,6 +1,7 @@
-import { supabase } from "../supabase";
+import { callCliApi } from "../supabase";
 import { loadConfig } from "../config";
 import { decryptSecretValue, decryptVaultKey } from "../crypto";
+import { error, warn, info, bold, success } from "../utils/colors";
 
 interface VaultMemberWithJoin {
     encrypted_vault_key: string;
@@ -29,41 +30,21 @@ export async function pullSecrets(
     const config = loadConfig();
 
     if (!config.email || !config.privateKey) {
-        console.error("Missing email or privateKey in config. Please login or run init.");
+        error("Missing email or privateKey in config. Please login first.");
         return [];
     }
 
     const vaultNameOrId = vault || config.vaultId || config.vaultName;
     if (!vaultNameOrId) {
-        console.error("No vault specified and no project configuration found. Run `vaultix init` or specify a vault.");
+        error("No vault specified and no project configuration found. Run `vaultix init` or specify a vault.");
         return [];
     }
 
-    const client = supabase();
-
-    // 1. Get the vault member record to get both vault access and vault ID
-    const query = client
-        .from("vault_members")
-        .select(`
-            encrypted_vault_key,
-            vault_id,
-            vaults!inner(id, name),
-            users!inner(email, public_key)
-        `)
-        .eq("users.email", config.email);
-
-    // If it looks like a UUID, search by vault_id, otherwise by name
-    if (vaultNameOrId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-        query.eq("vault_id", vaultNameOrId);
-    } else {
-        query.eq("vaults.name", vaultNameOrId);
-    }
-
-    const { data: memberData, error: memberError } = await query.single();
-
+    // 1. Get the vault member record via API
+    const { data: memberData, error: memberError } = await callCliApi("get-vault-access", { vaultNameOrId });
 
     if (memberError || !memberData) {
-        console.error("Error fetching vault access:", memberError?.message || "No access to this vault.");
+        error(`Failed to fetch vault access: ${memberError || "No access to this vault"}`);
         return [];
     }
 
@@ -71,16 +52,14 @@ export async function pullSecrets(
 
     const env = opts.env ?? "development"
 
-    // 2. Find the environment ID by name within this vault (case-insensitive)
-    const { data: envData, error: envError } = await client
-        .from("environments")
-        .select("id")
-        .eq("vault_id", member.vault_id)
-        .ilike("name", env)
-        .single();
+    // 2. Find the environment ID via API
+    const { data: envData, error: envError } = await callCliApi("get-environment", { 
+        vaultId: member.vault_id, 
+        envName: env 
+    });
 
     if (envError || !envData) {
-        console.error(`Environment "${opts.env}" not found in vault "${vaultNameOrId}".`);
+        error(`Environment "${env}" not found in vault "${vaultNameOrId}".`);
         return [];
     }
 
@@ -94,24 +73,23 @@ export async function pullSecrets(
             config.privateKey
         );
     } catch (err) {
-        console.error("Failed to decrypt vault key. Your local private key might not match.");
+        error("Failed to decrypt vault key. Your local private key might not match.");
         return [];
     }
 
-    // 4. Fetch the secrets for this environment
-    const { data: secretsData, error: secretsError } = await client
-        .from("secrets")
-        .select(`key, encrypted_payload, nonce`)
-        .eq("environment_id", envData.id)
-        .eq("vault_id", member.vault_id);
+    // 4. Fetch the secrets via API
+    const { data: secretsData, error: secretsError } = await callCliApi("get-secrets", {
+        vaultId: member.vault_id,
+        environmentId: envData.id
+    });
 
     if (secretsError) {
-        console.error("Error pulling secrets:", secretsError.message);
+        error(`Error pulling secrets: ${secretsError}`);
         return [];
     }
 
     if (!secretsData || secretsData.length === 0) {
-        console.log(`No secrets found for vault "${vaultNameOrId}" and environment "${opts.env}"`);
+        warn(`No secrets found for vault "${vaultNameOrId}" and environment "${env}"`);
         return [];
     }
 
@@ -125,7 +103,7 @@ export async function pullSecrets(
             const value = await decryptSecretValue(s.encrypted_payload, s.nonce, vaultKey);
             decryptedSecrets.push({ key: s.key, value });
         } catch (err) {
-            console.error(`Failed to decrypt secret "${s.key}"`);
+            error(`Failed to decrypt secret "${s.key}"`);
         }
     }
     return decryptedSecrets;

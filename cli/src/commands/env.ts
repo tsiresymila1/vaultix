@@ -1,52 +1,35 @@
-import { supabase } from "../supabase";
+import { callCliApi } from "../supabase";
 import { loadConfig } from "../config";
+import { error, bold, colors, info } from "../utils/colors";
 
 export async function listEnvs(vault: string | undefined): Promise<void> {
     const config = loadConfig();
     const vaultNameOrId = vault || config.vaultName || config.vaultId;
 
     if (!vaultNameOrId) {
-        console.error("No vault specified and no project configuration found. Run `vaultix init` or specify a vault.");
+        error("No vault specified and no project configuration found. Run `vaultix init` or specify a vault.");
         return;
     }
 
-    const client = supabase();
+    info(`Fetching environments for vault: ${bold(vaultNameOrId)}...`);
 
-    // 1. Find vault ID
-    const query = client.from("vaults").select("id");
+    const { data, error: apiError } = await callCliApi("list-envs", { vaultNameOrId });
 
-    if (vaultNameOrId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-        query.eq("id", vaultNameOrId);
-    } else {
-        query.ilike("name", vaultNameOrId);
-    }
-
-
-    const { data: vaultData, error: vaultError } = await query.single();
-
-    if (vaultError || !vaultData) {
-        console.error(`Vault "${vaultNameOrId}" not found.`);
-        return;
-    }
-
-    // 2. Fetch environments for this vault
-    const { data, error } = await client
-        .from("environments")
-        .select("name")
-        .eq("vault_id", vaultData.id)
-        .order("name", { ascending: true });
-
-    if (error) {
-        console.error("Error fetching environments:", error.message);
+    if (apiError) {
+        error(`Failed to fetch environments: ${apiError}`);
         return;
     }
 
     if (!data || data.length === 0) {
-        console.log(`No environments found for vault "${vaultNameOrId}".`);
+        console.log(`\nNo environments found for vault "${bold(vaultNameOrId)}".\n`);
         return;
     }
 
-    data.forEach(e => console.log(e.name));
+    console.log(`\n${bold("Environments:")}`);
+    data.forEach((e: { name: string }) => {
+        console.log(`  ${colors.fg.cyan}→${colors.reset} ${e.name}`);
+    });
+    console.log("");
 }
 
 
