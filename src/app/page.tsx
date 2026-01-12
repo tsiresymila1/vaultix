@@ -13,14 +13,17 @@ export default function HomePage() {
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       {/* Header */}
       <header className="px-6 h-16 flex items-center justify-between border-b border-border/40 sticky top-0 bg-background/80 backdrop-blur-md z-50">
-        <div className="flex items-center gap-2 font-bold text-xl tracking-tight">
+        <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight">
           <Shield className="w-6 h-6 text-primary" />
           <span>Vaultix</span>
-        </div>
+        </Link>
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-muted-foreground">
-          <Link href="#features" className="hover:text-foreground transition-colors">Features</Link>
-          <Link href="#security" className="hover:text-foreground transition-colors">Security</Link>
-          <Link href="#cli" className="hover:text-foreground transition-colors">CLI</Link>
+          <Link href="/share" className="hover:text-foreground transition-colors flex items-center gap-1.5 text-primary/80">
+             <Share2 className="w-4 h-4" /> Share Secret
+          </Link>
+          <Link href="/#features" className="hover:text-foreground transition-colors">Features</Link>
+          <Link href="/#security" className="hover:text-foreground transition-colors">Security</Link>
+          <Link href="/#cli" className="hover:text-foreground transition-colors">CLI</Link>
         </nav>
         {user ? (
           <div className="flex items-center gap-4">
@@ -67,7 +70,7 @@ export default function HomePage() {
         {/* Features Grid */}
         <section id="features" className="py-20 px-6 bg-muted/30 border-y border-border/40">
           <div className="max-w-6xl mx-auto">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid md:grid-cols-2 gap-8">
               <FeatureCard
                 icon={<Lock className="w-6 h-6" />}
                 title="End-to-End Encryption"
@@ -80,8 +83,13 @@ export default function HomePage() {
               />
               <FeatureCard
                 icon={<Share2 className="w-6 h-6" />}
-                title="Secure Sharing"
-                description="Share vaults with team members using public-key cryptography. No shared passwords, ever."
+                title="Vault Sharing"
+                description="Share entire vaults with team members using public-key cryptography. No shared passwords, ever."
+              />
+               <FeatureCard
+                icon={<Shield className="w-6 h-6" />}
+                title="Vaultix Note"
+                description="Share ephemeral secrets via secure, one-time public links. Zero-knowledge visibility for external sharing."
               />
             </div>
           </div>

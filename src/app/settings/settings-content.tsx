@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { UserSettings } from "@/types";
+import Link from "next/link";
 
 interface SettingsPageContentProps {
     initialSettings: UserSettings | null;
@@ -212,8 +213,10 @@ export default function SettingsPageContent({ initialSettings }: SettingsPageCon
                                 Connected to Supabase Cloud. End-to-end encryption active via Libsodium WASM.
                             </p>
                         </div>
-                        <Button variant="link" className="p-0 h-auto self-start mt-4 gap-1 text-primary hover:no-underline text-xs font-bold uppercase tracking-widest group/btn">
-                            System Status <ArrowRight className="h-3 w-3 group-hover/btn:translate-x-1 transition-transform" />
+                        <Button asChild variant="link" className="p-0 h-auto self-start mt-4 gap-1 text-primary hover:no-underline text-xs font-bold uppercase tracking-widest group/btn">
+                            <a href="https://status.supabase.com/" target="_blank" rel="noopener noreferrer">
+                                System Status <ArrowRight className="h-3 w-3 group-hover/btn:translate-x-1 transition-transform" />
+                            </a>
                         </Button>
                     </Card>
                     <Card className="rounded-lg border-border bg-card shadow-sm p-6 flex flex-col justify-between group border-transparent hover:border-border transition-all">
@@ -226,8 +229,10 @@ export default function SettingsPageContent({ initialSettings }: SettingsPageCon
                                 Download the Vaultix CLI to manage secrets directly from your terminal.
                             </p>
                         </div>
-                        <Button variant="link" className="p-0 h-auto self-start mt-4 gap-1 text-primary hover:no-underline text-xs font-bold uppercase tracking-widest group/btn">
-                            Download CLI <ArrowRight className="h-3 w-3 group-hover/btn:translate-x-1 transition-transform" />
+                        <Button asChild variant="link" className="p-0 h-auto self-start mt-4 gap-1 text-primary hover:no-underline text-xs font-bold uppercase tracking-widest group/btn">
+                            <Link href="/#cli">
+                                Download CLI <ArrowRight className="h-3 w-3 group-hover/btn:translate-x-1 transition-transform" />
+                            </Link>
                         </Button>
                     </Card>
                 </div>

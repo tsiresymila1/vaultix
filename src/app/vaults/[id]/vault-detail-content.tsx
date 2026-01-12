@@ -4,6 +4,7 @@ import AppShell from "@/components/layout/app-shell";
 import { AddSecretDialog } from "@/components/shared/add-secret-dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { ImportEnvDialog } from "@/components/shared/import-env-dialog";
+import { ShareSecretDialog } from "@/components/shared/share-secret-dialog";
 import { UnlockVaultDialog } from "@/components/shared/unlock-vault-dialog";
 import { VaultMembersDialog } from "@/components/shared/vault-members-dialog";
 import { VaultSettingsDialog } from "@/components/shared/vault-settings-dialog";
@@ -31,6 +32,7 @@ import {
     RefreshCw,
     Search,
     Settings,
+    Share2,
     Shield,
     Trash2,
     Users
@@ -77,6 +79,8 @@ export default function VaultDetailContent({
     const [searchQuery, setSearchQuery] = useState("");
     const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
     const [userRole, setUserRole] = useState<string | null>(null);
+    const [shareDialogOpen, setShareDialogOpen] = useState(false);
+    const [secretToShare, setSecretToShare] = useState<Secret | null>(null);
 
     const router = useRouter();
 
@@ -514,6 +518,17 @@ export default function VaultDetailContent({
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
+                                                                className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary"
+                                                                onClick={() => {
+                                                                    setSecretToShare(secret);
+                                                                    setShareDialogOpen(true);
+                                                                }}
+                                                            >
+                                                                <Share2 className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
                                                                 className="h-8 w-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                                                 onClick={() => setDeleteSecretId(secret.id)}
                                                             >
@@ -584,6 +599,14 @@ export default function VaultDetailContent({
             <UnlockVaultDialog
                 open={unlockDialogOpen}
                 onOpenChange={setUnlockDialogOpen}
+            />
+
+            <ShareSecretDialog
+                open={shareDialogOpen}
+                onOpenChange={setShareDialogOpen}
+                secret={secretToShare}
+                vaultKey={vaultKey}
+                preDecryptedValue={secretToShare ? decryptedSecrets[secretToShare.id] : undefined}
             />
         </AppShell>
     );
