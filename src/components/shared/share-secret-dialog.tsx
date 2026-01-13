@@ -29,7 +29,7 @@ import { toast } from "sonner";
 interface ShareSecretDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    secret: Secret | null;
+    secrets: Secret[] | null;
     vaultKey: string | null;
     preDecryptedValue?: string;
 }
@@ -37,7 +37,7 @@ interface ShareSecretDialogProps {
 export function ShareSecretDialog({
     open,
     onOpenChange,
-    secret,
+    secrets,
     vaultKey,
     preDecryptedValue,
 }: ShareSecretDialogProps) {
@@ -48,26 +48,39 @@ export function ShareSecretDialog({
     const [copied, setCopied] = useState(false);
 
     const handleShare = async () => {
-        if (!secret || !vaultKey) return;
+        if (!secrets || secrets.length === 0) {
+            toast.error("No secrets selected to share");
+            return;
+        }
+
+        if (!vaultKey) {
+            toast.error("Vault is locked. Please unlock it first.");
+            return;
+        }
 
         setLoading(true);
         try {
-            // 1. Get the raw value
-            let rawValue = preDecryptedValue;
-            if (!rawValue) {
-                rawValue = await decryptSecret(
-                    secret.encrypted_payload,
-                    secret.nonce,
-                    vaultKey
-                );
+            let combinedContent = "";
+
+            if (secrets.length === 1 && preDecryptedValue) {
+                combinedContent = `${secrets[0].key}: ${preDecryptedValue}`;
+            } else {
+                const contents = await Promise.all(secrets.map(async (s) => {
+                    const val = await decryptSecret(
+                        s.encrypted_payload,
+                        s.nonce,
+                        vaultKey
+                    );
+                    return `${s.key}: ${val}`;
+                }));
+                combinedContent = contents.join("\n");
             }
 
             // 2. Generate ephemeral key specific to this share link
-            // Using the existing generateVaultKey function which generates a standard key
             const ephemeralKeyBase64 = await generateVaultKey();
 
             // 3. Encrypt the secret with the ephemeral key
-            const { cipher, nonce } = await encryptSecret(rawValue, ephemeralKeyBase64);
+            const { cipher, nonce } = await encryptSecret(combinedContent, ephemeralKeyBase64);
 
             // 4. Calculate expiration
             const expirationDate = new Date();

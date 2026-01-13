@@ -6,7 +6,7 @@ import { decryptSecret } from "@/lib/crypto";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { AlertCircle, Check, Copy, Eye, EyeOff, Loader2, ShieldCheck, Timer } from "lucide-react";
-import { useEffect, useState } from "react";
+import { MouseEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { use } from "react";
@@ -91,10 +91,17 @@ export default function SharedSecretPage({ params }: SharedSecretPageProps) {
 
     const copyToClipboard = () => {
         if (!secretValue) return;
-        navigator.clipboard.writeText(secretValue);
+        // Reformat from "KEY: VALUE" to "KEY=VALUE" for env compatibility if it contains colons
+        const envFormatted = secretValue.split('\n').map(line => {
+            const colonIndex = line.indexOf(':');
+            if (colonIndex === -1) return line;
+            return `${line.substring(0, colonIndex).trim()}=${line.substring(colonIndex + 1).trim()}`;
+        }).join('\n');
+        
+        navigator.clipboard.writeText(envFormatted);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-        toast.success("Copied to clipboard");
+        toast.success("Copied all as .env format");
     };
 
     if (!decryptionKey && !loading) {
@@ -193,14 +200,51 @@ export default function SharedSecretPage({ params }: SharedSecretPageProps) {
                             <CardContent className="pb-2">
                                 <div className="relative group">
                                     <div className={cn(
-                                        "w-full rounded-md border min-h-[100px] p-4 font-mono text-sm break-all transition-all relative overflow-hidden",
+                                        "w-full rounded-md border min-h-[100px] p-0 font-mono text-sm transition-all relative overflow-hidden",
                                         revealed
                                             ? "bg-secondary text-foreground border-border"
                                             : "bg-secondary/30 text-transparent border-border/50 cursor-pointer hover:bg-secondary/50"
                                     )} onClick={() => !revealed && setRevealed(true)}>
-                                        <span className={cn(revealed ? "" : "blur-sm select-none opacity-50")}>
-                                            {revealed ? secretValue : "••••••••••••••••••••••••••••••••••••••••••••••••••••••••"}
-                                        </span>
+                                        <div className={cn(
+                                            "divide-y divide-border/50",
+                                            revealed ? "" : "blur-sm select-none opacity-50 block p-4"
+                                        )}>
+                                            {revealed ? (
+                                                secretValue?.split('\n').map((line, i) => {
+                                                    const colonIndex = line.indexOf(':');
+                                                    if (colonIndex === -1) return <div key={i} className="p-4">{line}</div>;
+                                                    
+                                                    const key = line.substring(0, colonIndex).trim();
+                                                    const value = line.substring(colonIndex + 1).trim();
+                                                    
+                                                    const copyIndividualValue = (e: MouseEvent, k: string, v: string) => {
+                                                        e.stopPropagation();
+                                                        const envEntry = `${k}=${v}`;
+                                                        navigator.clipboard.writeText(envEntry);
+                                                        toast.success(`Copied ${k}=...`);
+                                                    };
+
+                                                    return (
+                                                        <div key={i} className="flex items-start sm:items-center justify-between p-4 gap-4 hover:bg-background/50 transition-colors group/row">
+                                                            <div className="flex flex-col gap-1 min-w-0">
+                                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0">{key}</span>
+                                                                <span className="font-mono text-sm break-all text-primary font-medium">{value}</span>
+                                                            </div>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8 rounded-md opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0 hover:bg-primary/10 hover:text-primary"
+                                                                onClick={(e) => copyIndividualValue(e, key, value)}
+                                                            >
+                                                                <Copy className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        </div>
+                                                    );
+                                                })
+                                            ) : (
+                                                "••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
+                                            )}
+                                        </div>
 
                                         {!revealed && (
                                             <div className="absolute inset-0 flex items-center justify-center bg-background/5 backdrop-blur-[2px]">

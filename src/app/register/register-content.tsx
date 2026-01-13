@@ -87,9 +87,9 @@ export default function RegisterPageContent() {
             <div className="hidden bg-muted lg:block relative h-full">
                 <div className="absolute inset-0 bg-zinc-900 border-r border-white/10" />
                 <div className="relative h-full flex flex-col justify-between p-10 text-white z-20">
-                    <div className="flex items-center gap-2 text-lg font-medium">
+                    <Link href="/" className="flex items-center gap-2 text-lg font-medium hover:opacity-80 transition-opacity">
                         <Shield className="w-6 h-6 text-primary" /> Vaultix
-                    </div>
+                    </Link>
                     <div className="space-y-2 max-w-lg">
                         <blockquote className="space-y-2">
                             <p className="text-sm">

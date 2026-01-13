@@ -56,8 +56,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-border bg-background lg:block z-50">
                 <div className="flex flex-col h-full">
                     <div className="flex items-center h-16 px-6 border-b border-border">
-                        <Link href="/vaults" className="flex items-center gap-2 group">
-                            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center transition-transform duration-200">
+                        <Link href="/" className="flex items-center gap-2 group">
+                            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center transition-transform duration-200 group-hover:scale-105">
                                 <Shield className="w-5 h-5 text-primary-foreground" />
                             </div>
                             <span className="text-lg font-bold tracking-tight text-foreground">
@@ -122,7 +122,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {/* Mobile Header */}
             <header className="lg:hidden sticky top-0 z-40 w-full border-b border-border bg-background">
                 <div className="flex items-center justify-between h-14 px-4">
-                    <Link href="/vaults" className="flex items-center gap-2">
+                    <Link href="/" className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
                             <Shield className="w-4 h-4 text-primary-foreground" />
                         </div>
@@ -142,7 +142,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         <SheetContent side="left" className="w-72 p-0">
                             <div className="flex flex-col h-full">
                                 <div className="flex items-center h-16 px-6 border-b border-border">
-                                    <Link href="/vaults" className="flex items-center gap-2">
+                                    <Link href="/" className="flex items-center gap-2">
                                         <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
                                             <Shield className="w-5 h-5 text-primary-foreground" />
                                         </div>
