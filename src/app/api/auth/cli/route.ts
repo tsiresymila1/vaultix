@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { signCliToken } from "@/utils/jwt";
 
 export async function GET(request: NextRequest) {
     const callback = request.nextUrl.searchParams.get("callback");
@@ -8,43 +9,29 @@ export async function GET(request: NextRequest) {
         return new Response("Missing callback URL", { status: 400 });
     }
 
-    const urlToken = request.nextUrl.searchParams.get("access_token") || request.nextUrl.searchParams.get("token");
-    const urlRefreshToken = request.nextUrl.searchParams.get("refresh_token");
-    const urlEmail = request.nextUrl.searchParams.get("email");
-
-    let sessionToken = urlToken;
-    let sessionRefreshToken = urlRefreshToken;
-    let sessionEmail = urlEmail || "";
-
     // Always try to get a fresh session from cookies if possible
     const supabase = await createClient();
     const { data: { session } } = await supabase.auth.getSession();
 
-    if (session) {
-        sessionToken = sessionToken || session.access_token;
-        sessionRefreshToken = sessionRefreshToken || session.refresh_token;
-        sessionEmail = sessionEmail || session.user.email || "";
-    }
-
-    if (!sessionToken) {
-        // Redirect to login if no session/token found
+    if (!session) {
+        // Redirect to login if no session matches
         const currentUrl = request.nextUrl.toString();
         const loginUrl = new URL("/login", request.url);
         loginUrl.searchParams.set("returnTo", currentUrl);
         return NextResponse.redirect(loginUrl);
     }
 
-    // Construct redirect URL back to the CLI
-    const redirectUrl = new URL(callback);
-    redirectUrl.searchParams.set("token", sessionToken);
+    // Generate a backend-managed token for the CLI
+    const cliToken = await signCliToken({
+        userId: session.user.id,
+        email: session.user.email || ""
+    });
 
-    if (sessionRefreshToken && sessionRefreshToken !== "null") {
-        redirectUrl.searchParams.set("refresh_token", sessionRefreshToken);
-    }
+    // Construct redirect URL to the CLI login page
+    const loginPageUrl = new URL("/cli/login", request.url);
+    loginPageUrl.searchParams.set("callback", callback);
+    loginPageUrl.searchParams.set("token", cliToken);
+    loginPageUrl.searchParams.set("email", session.user.email || "");
 
-    if (sessionEmail) {
-        redirectUrl.searchParams.set("email", sessionEmail);
-    }
-
-    return NextResponse.redirect(redirectUrl);
+    return NextResponse.redirect(loginPageUrl);
 }

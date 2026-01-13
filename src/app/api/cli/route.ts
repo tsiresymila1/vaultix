@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { verifyCliToken } from '@/utils/jwt'
 
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('Authorization')
@@ -9,12 +10,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized: Missing token' }, { status: 401 })
   }
 
-  const supabase = createAdminClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+  const payload = await verifyCliToken(token)
 
-  if (authError || !user) {
+  if (!payload) {
     return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 })
   }
+
+  const user = { id: payload.userId, email: payload.email }
+  const supabase = createAdminClient()
 
   try {
     const { action, params } = await req.json()

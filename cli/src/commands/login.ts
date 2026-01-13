@@ -2,10 +2,9 @@ import http from "node:http";
 import { exec } from "node:child_process";
 import readline from "node:readline";
 import { saveGlobalConfig } from "../config";
-import { createSupabaseClient, callCliApi } from "../supabase";
+import { callCliApi } from "../supabase";
 import { decryptPrivateKey, deriveMasterKey } from "../crypto";
-import { Session } from "@supabase/supabase-js";
-import { success, error, info, bold, warn } from "../utils/colors";
+import { success, error, info, bold } from "../utils/colors";
 
 const APP_URL = process.env.VAULTIX_APP_URL || "https://vaultix-secure.vercel.app";
 
@@ -26,9 +25,10 @@ export async function login(): Promise<void> {
     return new Promise((resolve, reject) => {
         const server = http.createServer(async (req, res) => {
             const url = new URL(req.url || "", "http://localhost");
+            // console.log("CLI Debug: Received request at", req.url);
             const token = url.searchParams.get("token");
-            const refreshToken = url.searchParams.get("refresh_token");
             const email = url.searchParams.get("email");
+            const urlPrivateKey = url.searchParams.get("private_key");
 
             if (token && email) {
                 res.writeHead(200, { "Content-Type": "text/html" });
@@ -52,70 +52,52 @@ export async function login(): Promise<void> {
                 success(`Authenticated as ${bold(email)}`);
 
                 try {
-                    let session: Session | null = null;
-                    let supabase = createSupabaseClient();
-
-                    // If we have a refresh token, try to establish a proper session
-                    if (refreshToken && refreshToken !== "null") {
-                        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-                            access_token: token,
-                            refresh_token: refreshToken
-                        });
-
-                        if (!sessionError && sessionData.session) {
-                            session = sessionData.session;
-                        } else {
-                            warn("Could not establish a refreshing session. Proceeding with temporary token...");
-                        }
-                    }
-
-                    // If no session established yet, use the access token directly
-                    if (!session) {
-                        supabase = createSupabaseClient(token);
-                    }
-                    // Save temporary token for API call
+                    // Save token for API call
                     saveGlobalConfig({ token: token, email: email });
 
-                    info("Fetching user crypto data via API...");
-                    const { data: userData, error: apiError } = await callCliApi("get-user-crypto");
+                    let privateKey = urlPrivateKey;
+                    let publicKey: string | undefined;
 
-                    if (apiError || !userData) {
-                        error(`Failed to fetch user data: ${apiError || "User not found"}`);
-                        reject(new Error("User data fetch failed"));
-                        return;
+                    if (!privateKey) {
+                        info("Fetching user crypto data via API...");
+                        const { data: userData, error: apiError } = await callCliApi("get-user-crypto");
+
+                        if (apiError || !userData) {
+                            error(`Failed to fetch user data: ${apiError || "User not found"}`);
+                            reject(new Error("User data fetch failed"));
+                            return;
+                        }
+
+                        console.log(`\n${bold("Private Key Decryption:")}`);
+                        console.log("Your private key is encrypted. Please enter your master password to decrypt it.");
+                        const password = await prompt("Master Password: ");
+
+                        if (!password) {
+                            error("Password is required to decrypt your private key.");
+                            reject(new Error("Password required"));
+                            return;
+                        }
+
+                        info("Deriving master key and decrypting private key...");
+                        const masterKey = await deriveMasterKey(password, userData.master_key_salt);
+                        privateKey = await decryptPrivateKey(
+                            userData.encrypted_private_key,
+                            userData.private_key_nonce,
+                            masterKey
+                        );
+                        publicKey = userData.public_key;
+                    } else {
+                        success("Private key received securely from browser.");
+                        // Fetch the public key separately if we got the private key from URL
+                        const { data: userData } = await callCliApi("get-user-crypto");
+                        if (userData) publicKey = userData.public_key;
                     }
-
-                    console.log(`\n${bold("Private Key Decryption:")}`);
-                    console.log("Your private key is encrypted. Please enter your master password to decrypt it.");
-                    const password = await prompt("Master Password: ");
-
-                    if (!password) {
-                        error("Password is required to decrypt your private key.");
-                        reject(new Error("Password required"));
-                        return;
-                    }
-
-                    info("Deriving master key and decrypting private key...");
-                    const masterKey = await deriveMasterKey(password, userData.master_key_salt);
-                    const privateKey = await decryptPrivateKey(
-                        userData.encrypted_private_key,
-                        userData.private_key_nonce,
-                        masterKey
-                    );
-
-                    // Final session object to persist
-                    const sessionToSave = session || {
-                        access_token: token,
-                        refresh_token: refreshToken === "null" ? "" : (refreshToken || ""),
-                        user: { email }
-                    };
 
                     saveGlobalConfig({
-                        token: sessionToSave.access_token,
+                        token: token,
                         email,
                         privateKey,
-                        publicKey: userData.public_key,
-                        authSession: sessionToSave as unknown as Record<string, unknown>
+                        publicKey: publicKey,
                     });
 
                     success("Logged in and private key successfully decrypted.");
