@@ -206,8 +206,8 @@ export default function SharedSecretPage({ params }: SharedSecretPageProps) {
                                             : "bg-secondary/30 text-transparent border-border/50 cursor-pointer hover:bg-secondary/50"
                                     )} onClick={() => !revealed && setRevealed(true)}>
                                         <div className={cn(
-                                            "divide-y divide-border/50",
-                                            revealed ? "" : "blur-sm select-none opacity-50 block p-4"
+                                            "divide-y divide-border/50 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent",
+                                            revealed ? "" : "blur-sm select-none opacity-50 block p-4 overflow-hidden"
                                         )}>
                                             {revealed ? (
                                                 secretValue?.split('\n').map((line, i) => {
