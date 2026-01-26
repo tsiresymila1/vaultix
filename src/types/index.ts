@@ -57,3 +57,16 @@ export interface MemberData {
         public_key: string;
     } | null;
 }
+
+export interface PasswordEntry {
+    id: string;
+    title: string;
+    website_url: string | null;
+    username: string | null;
+    encrypted_password: string;
+    password_nonce: string;
+    encrypted_otp_seed: string | null;
+    otp_nonce: string | null;
+    notes: string | null;
+    created_at: string;
+}

@@ -66,7 +66,7 @@ export function VaultMembersDialog({
                 .eq("vault_id", vaultId);
 
             if (error) throw error;
-            setMembers(data as unknown as VaultMember[]);
+            setMembers(data || []);
         } catch {
             toast.error("Failed to fetch members");
         } finally {
@@ -128,8 +128,9 @@ export function VaultMembersDialog({
                 .single();
 
             if (insertError) throw insertError;
-
-            setMembers([...members, newMember as unknown as VaultMember]);
+            if (newMember) {
+                setMembers([...members, newMember]);
+            }
             setInviteEmail("");
 
             // 4. Send email notification via Server Action

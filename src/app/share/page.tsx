@@ -17,6 +17,7 @@ export default function CreateSharePage() {
     const [secretValue, setSecretValue] = useState("");
     const [duration, setDuration] = useState("3600");
     const [views, setViews] = useState("unlimited");
+    const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
@@ -54,7 +55,22 @@ export default function CreateSharePage() {
             if (error) throw error;
 
             // 5. Generate URL
-            const url = `${window.location.origin}/share/${data.id}#${ephemeralKeyBase64}`;
+            let hash = ephemeralKeyBase64;
+
+            // 6. If password is set, encrypt the ephemeral key with the password
+            if (password.trim()) {
+                const { deriveMasterKey, generateSalt, encryptSecret, toBase64 } = await import("@/lib/crypto");
+                const salt = await generateSalt();
+                const masterKey = await deriveMasterKey(password.trim(), salt);
+                
+                // We reuse encryptSecret but it's actually just symmetric encryption
+                const { cipher, nonce } = await encryptSecret(ephemeralKeyBase64, await toBase64(masterKey));
+                
+                // Format: pwd:salt:nonce:encryptedKey
+                hash = `pwd:${await toBase64(salt)}:${nonce}:${cipher}`;
+            }
+
+            const url = `${window.location.origin}/share/${data.id}#${hash}`;
             setGeneratedUrl(url);
             toast.success("Secret link created!");
 
@@ -79,6 +95,7 @@ export default function CreateSharePage() {
         setSecretValue("");
         setDuration("3600");
         setViews("unlimited");
+        setPassword("");
     };
 
     return (
@@ -130,6 +147,7 @@ export default function CreateSharePage() {
                                             </SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="300">5 Minutes</SelectItem>
+                                                <SelectItem value="600">10 Minutes</SelectItem>
                                                 <SelectItem value="1800">30 Minutes</SelectItem>
                                                 <SelectItem value="3600">1 Hour</SelectItem>
                                                 <SelectItem value="86400">1 Day</SelectItem>
@@ -151,6 +169,24 @@ export default function CreateSharePage() {
                                             </SelectContent>
                                         </Select>
                                     </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="password">Password Protection (Optional)</Label>
+                                    </div>
+                                    <Input
+                                        id="password"
+                                        type="password"
+                                        placeholder="Add a password for extra security..."
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        disabled={loading}
+                                        className="bg-background"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">
+                                        If set, the recipient will need this password to decrypt the secret.
+                                    </p>
                                 </div>
                             </>
                         ) : (

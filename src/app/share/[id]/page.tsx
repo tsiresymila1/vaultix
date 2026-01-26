@@ -2,11 +2,13 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { OTPAuthenticator } from "@/components/shared/otp-authenticator";
 import { decryptSecret } from "@/lib/crypto";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Check, Copy, Eye, EyeOff, Loader2, ShieldCheck, Timer } from "lucide-react";
-import { MouseEvent, useEffect, useState } from "react";
+import { AlertCircle, Check, Copy, Eye, EyeOff, Loader2, Lock, ShieldCheck, Timer } from "lucide-react";
+import { FormEvent, MouseEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { use } from "react";
@@ -26,14 +28,49 @@ export default function SharedSecretPage({ params }: SharedSecretPageProps) {
     const [revealed, setRevealed] = useState(false);
     const [copied, setCopied] = useState(false);
     const [decryptionKey, setDecryptionKey] = useState<string | null>(null);
+    const [passwordRequired, setPasswordRequired] = useState(false);
+    const [enteredPassword, setEnteredPassword] = useState("");
+    const [passwordLoading, setPasswordLoading] = useState(false);
 
     useEffect(() => {
         // Extract key from hash
         const hash = window.location.hash;
         if (hash && hash.startsWith("#")) {
-            setDecryptionKey(hash.substring(1));
+            const rawKey = hash.substring(1);
+            if (rawKey.startsWith("pwd:")) {
+                setPasswordRequired(true);
+                setLoading(false); // Stop general loading to show password UI
+            } else {
+                setDecryptionKey(rawKey);
+            }
         }
     }, []);
+
+    const handlePasswordSubmit = async (e: FormEvent) => {
+        e.preventDefault();
+        if (!enteredPassword.trim()) return;
+
+        setPasswordLoading(true);
+        try {
+            const hash = window.location.hash.substring(1);
+            const [, saltBase64, nonceBase64, cipherBase64] = hash.split(":");
+
+            const { deriveMasterKey, fromBase64, decryptSecret } = await import("@/lib/crypto");
+            const salt = await fromBase64(saltBase64);
+            const masterKey = await deriveMasterKey(enteredPassword.trim(), salt);
+            
+            const decryptedKey = await decryptSecret(cipherBase64, nonceBase64, await (await import("@/lib/crypto")).toBase64(masterKey));
+            
+            setDecryptionKey(decryptedKey);
+            setPasswordRequired(false);
+            setLoading(true); // Restart loading for fetching from Supabase
+        } catch (err) {
+            console.error("Password decryption error:", err);
+            toast.error("Incorrect password. Please try again.");
+        } finally {
+            setPasswordLoading(false);
+        }
+    };
 
     useEffect(() => {
         if (!decryptionKey) return;
@@ -103,6 +140,43 @@ export default function SharedSecretPage({ params }: SharedSecretPageProps) {
         setTimeout(() => setCopied(false), 2000);
         toast.success("Copied all as .env format");
     };
+
+    if (passwordRequired) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-background p-4">
+                <Card className="w-full max-w-md border-border bg-card shadow-lg">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Lock className="h-5 w-5 text-primary" />
+                            Password Protected
+                        </CardTitle>
+                        <CardDescription>
+                            This secret is protected by an additional password. Please enter it to continue.
+                        </CardDescription>
+                    </CardHeader>
+                    <form onSubmit={handlePasswordSubmit}>
+                        <CardContent className="space-y-4 py-4">
+                            <div className="space-y-2">
+                                <Input
+                                    type="password"
+                                    placeholder="Enter password..."
+                                    value={enteredPassword}
+                                    onChange={(e) => setEnteredPassword(e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+                        </CardContent>
+                        <CardFooter>
+                            <Button type="submit" className="w-full" disabled={passwordLoading}>
+                                {passwordLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {passwordLoading ? "Decrypting Key..." : "Access Secret"}
+                            </Button>
+                        </CardFooter>
+                    </form>
+                </Card>
+            </div>
+        );
+    }
 
     if (!decryptionKey && !loading) {
         return ( // No key in URL
@@ -217,6 +291,8 @@ export default function SharedSecretPage({ params }: SharedSecretPageProps) {
                                                     const key = line.substring(0, colonIndex).trim();
                                                     const value = line.substring(colonIndex + 1).trim();
                                                     
+                                                    const isOtpSeed = key === "OTP Seed";
+
                                                     const copyIndividualValue = (e: MouseEvent, k: string, v: string) => {
                                                         e.stopPropagation();
                                                         const envEntry = `${k}=${v}`;
@@ -225,19 +301,32 @@ export default function SharedSecretPage({ params }: SharedSecretPageProps) {
                                                     };
 
                                                     return (
-                                                        <div key={i} className="flex items-start sm:items-center justify-between p-4 gap-4 hover:bg-background/50 transition-colors group/row">
-                                                            <div className="flex flex-col gap-1 min-w-0">
-                                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0">{key}</span>
-                                                                <span className="font-mono text-sm break-all text-primary font-medium">{value}</span>
+                                                        <div key={i} className="flex flex-col hover:bg-background/50 transition-colors group/row">
+                                                            <div className="flex items-start sm:items-center justify-between p-4 gap-4">
+                                                                <div className="flex flex-col gap-1 min-w-0">
+                                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0">{key}</span>
+                                                                    <span className="font-mono text-sm break-all text-primary font-medium">{value}</span>
+                                                                </div>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 rounded-md opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0 hover:bg-primary/10 hover:text-primary"
+                                                                    onClick={(e) => copyIndividualValue(e, key, value)}
+                                                                >
+                                                                    <Copy className="h-3.5 w-3.5" />
+                                                                </Button>
                                                             </div>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-8 w-8 rounded-md opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0 hover:bg-primary/10 hover:text-primary"
-                                                                onClick={(e) => copyIndividualValue(e, key, value)}
-                                                            >
-                                                                <Copy className="h-3.5 w-3.5" />
-                                                            </Button>
+                                                            {isOtpSeed && value && (
+                                                                <div className="px-4 pb-4">
+                                                                    <OTPAuthenticator
+                                                                        secret={value}
+                                                                        issuer="Vaultix Shared"
+                                                                        accountName="Credential"
+                                                                        compact={true}
+                                                                        className="p-3 rounded-xl bg-primary/5 border border-primary/20"
+                                                                    />
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     );
                                                 })

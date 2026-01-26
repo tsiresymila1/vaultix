@@ -12,7 +12,8 @@ import {
     LogOut,
     Menu,
     User as UserIcon,
-    Search
+    Search,
+    Lock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     const navItems = [
         { href: "/vaults", icon: LayoutDashboard, label: "Vaults" },
+        {
+            href: "/passwords",
+            icon: Lock,
+            label: "Password Manager",
+            hidden: !userData || (userData.role !== 'admin' && userData.role !== 'moderator')
+        },
         {
             href: "/members",
             icon: Users,
