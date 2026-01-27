@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { RefreshCw, Key, Shield } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -42,6 +43,7 @@ export function CreatePasswordDialog({
     const [websiteUrl, setWebsiteUrl] = useState("");
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
+    const [otpEnabled, setOtpEnabled] = useState(false);
     const [otpSeed, setOtpSeed] = useState("");
     const [notes, setNotes] = useState("");
 
@@ -55,6 +57,7 @@ export function CreatePasswordDialog({
             if (decryptedData) {
                 setPassword(decryptedData.pass);
                 setOtpSeed(decryptedData.otp || "");
+                setOtpEnabled(!!decryptedData.otp);
             }
         } else if (open && !editEntry) {
             reset();
@@ -91,7 +94,7 @@ export function CreatePasswordDialog({
             
             let encOtpSeed = null;
             let otpNonce = null;
-            if (otpSeed.trim()) {
+            if (otpEnabled && otpSeed.trim()) {
                 const result = await encryptSecret(otpSeed.trim(), b64MK);
                 encOtpSeed = result.cipher;
                 otpNonce = result.nonce;
@@ -149,6 +152,7 @@ export function CreatePasswordDialog({
         setWebsiteUrl("");
         setUsername("");
         setPassword("");
+        setOtpEnabled(false);
         setOtpSeed("");
         setNotes("");
     };
@@ -214,20 +218,33 @@ export function CreatePasswordDialog({
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <Label htmlFor="otp">Authenticator Key (OTP Seed)</Label>
-                        <Input
-                            id="otp"
-                            value={otpSeed}
-                            onChange={(e) => setOtpSeed(e.target.value)}
-                            placeholder="JBSWY3DPEHPK3PXP"
-                            className="font-mono text-sm"
+                    <div className="flex items-center space-x-2 py-2">
+                        <Switch
+                            id="otp-enabled"
+                            checked={otpEnabled}
+                            onCheckedChange={setOtpEnabled}
                         />
-                        <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                            <Shield className="h-3 w-3" />
-                            This seed will be used to generate time-based one-time passwords.
-                        </p>
+                        <Label htmlFor="otp-enabled" className="text-sm font-medium cursor-pointer">
+                            Enable One-Time Password (OTP/2FA)
+                        </Label>
                     </div>
+
+                    {otpEnabled && (
+                        <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                            <Label htmlFor="otp">Authenticator Key (OTP Seed)</Label>
+                            <Input
+                                id="otp"
+                                value={otpSeed}
+                                onChange={(e) => setOtpSeed(e.target.value)}
+                                placeholder="JBSWY3DPEHPK3PXP"
+                                className="font-mono text-sm"
+                            />
+                            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                <Shield className="h-3 w-3" />
+                                This seed will be used to generate live auth codes.
+                            </p>
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         <Label htmlFor="notes">Notes</Label>

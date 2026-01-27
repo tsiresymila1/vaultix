@@ -2,10 +2,10 @@
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
-import { ArrowRight, Check, Copy, Github, Lock, Share2, Shield, Terminal } from "lucide-react";
-import { useState } from "react";
-import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { ArrowRight, Book, Check, Copy, Link as LinkIcon, Lock, Share2, Shield, Smartphone, Terminal } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -19,8 +19,9 @@ export default function HomePage() {
         </Link>
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-muted-foreground">
           <Link href="/share" className="hover:text-foreground transition-colors flex items-center gap-1.5 text-primary/80">
-             <Share2 className="w-4 h-4" /> Share Secret
+            <Share2 className="w-4 h-4" /> Share Secret
           </Link>
+          <Link href="/docs" className="hover:text-foreground transition-colors">Docs</Link>
           <Link href="/#features" className="hover:text-foreground transition-colors">Features</Link>
           <Link href="/#security" className="hover:text-foreground transition-colors">Security</Link>
           <Link href="/#cli" className="hover:text-foreground transition-colors">CLI</Link>
@@ -59,9 +60,9 @@ export default function HomePage() {
             <Link href="/register">
               <Button size="lg" className="h-12 px-8 text-base w-full sm:w-auto">Start for free</Button>
             </Link>
-            <Link href="https://github.com/tsiresymila1/vaultix" target="_blank">
+            <Link href="/docs">
               <Button variant="outline" size="lg" className="h-12 px-8 text-base w-full sm:w-auto gap-2">
-                <Github className="w-5 h-5" /> View on GitHub
+                <Book className="w-5 h-5" /> Explore Documentation
               </Button>
             </Link>
           </div>
@@ -70,7 +71,7 @@ export default function HomePage() {
         {/* Features Grid */}
         <section id="features" className="py-20 px-6 bg-muted/30 border-y border-border/40">
           <div className="max-w-6xl mx-auto">
-            <div className="grid md:grid-cols-2 gap-8">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
               <FeatureCard
                 icon={<Lock className="w-6 h-6" />}
                 title="End-to-End Encryption"
@@ -86,10 +87,15 @@ export default function HomePage() {
                 title="Vault Sharing"
                 description="Share entire vaults with team members using public-key cryptography. No shared passwords, ever."
               />
-               <FeatureCard
-                icon={<Shield className="w-6 h-6" />}
-                title="Vaultix Note"
-                description="Share ephemeral secrets via secure, one-time public links. Zero-knowledge visibility for external sharing."
+              <FeatureCard
+                icon={<LinkIcon className="w-6 h-6" />}
+                title="Vaultix Share"
+                description="Share ephemeral secrets via secure public links. Set expiration times and view limits for ultimate control over your data."
+              />
+              <FeatureCard
+                icon={<Smartphone className="w-6 h-6" />}
+                title="Live 2FA Authenticator"
+                description="Built-in TOTP support with a circular progress timer and QR code generation. Sync your codes across devices effortlessly."
               />
             </div>
           </div>
@@ -113,13 +119,25 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="py-12 px-6 border-t border-border/40 text-center md:text-left bg-muted/20">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex items-center gap-2 font-semibold text-muted-foreground">
-            <Shield className="w-5 h-5" />
-            <span>Vaultix</span>
+
+          <div className="flex flex-col items-right gap-2">
+            <div className="flex items-center gap-2 font-semibold text-muted-foreground">
+              <Shield className="w-5 h-5" />
+              <span>Vaultix</span>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              © {new Date().getFullYear()} Vaultix. All rights reserved.
+            </div>
           </div>
-          <div className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Vaultix. All rights reserved.
+          <div className="gap-4 space-y-4">
+            
+            <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+              <Link href="/privacy-policy" className="hover:text-primary transition-colors">Privacy Policy</Link>
+              <span className="w-1 h-1 rounded-full bg-border" />
+              <Link href="/data-deletion" className="hover:text-primary transition-colors">Data Deletion</Link>
+            </div>
           </div>
+
         </div>
       </footer>
     </div>

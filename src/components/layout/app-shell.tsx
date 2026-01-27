@@ -13,7 +13,8 @@ import {
     Menu,
     User as UserIcon,
     Search,
-    Lock
+    Lock,
+    Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         },
         { href: "/profile", icon: UserIcon, label: "Profile" },
         { href: "/settings", icon: Settings, label: "Settings" },
+        {
+            href: "/admin/deletions",
+            icon: Trash2,
+            label: "Data Deletions",
+            hidden: !userData || userData.role !== 'admin'
+        },
     ].filter(item => !item.hidden);
 
     const handleSignOut = async () => {

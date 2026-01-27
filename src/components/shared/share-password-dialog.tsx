@@ -11,7 +11,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Check, Copy, Link as LinkIcon, Loader2, Shield } from "lucide-react";
+import { Check, Copy, Link as LinkIcon, Loader2, Shield, Clock, Eye } from "lucide-react";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -28,6 +35,8 @@ export function SharePasswordDialog({
     content,
 }: SharePasswordDialogProps) {
     const [password, setPassword] = useState("");
+    const [expiration, setExpiration] = useState("1"); // hours
+    const [maxViews, setMaxViews] = useState("1");
     const [loading, setLoading] = useState(false);
     const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
@@ -45,7 +54,7 @@ export function SharePasswordDialog({
 
             // 3. Store in Supabase
             const expirationDate = new Date();
-            expirationDate.setHours(expirationDate.getHours() + 1);
+            expirationDate.setHours(expirationDate.getHours() + parseInt(expiration));
 
             const { data, error } = await supabase
                 .from("shared_secrets")
@@ -53,7 +62,7 @@ export function SharePasswordDialog({
                     encrypted_payload: cipher,
                     nonce: nonce,
                     expires_at: expirationDate.toISOString(),
-                    views_remaining: 1,
+                    views_remaining: parseInt(maxViews),
                 })
                 .select("id")
                 .single();
@@ -92,13 +101,15 @@ export function SharePasswordDialog({
     const reset = () => {
         setGeneratedUrl(null);
         setPassword("");
+        setExpiration("1");
+        setMaxViews("1");
         onOpenChange(false);
     };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[400px]">
-                <DialogHeader>
+            <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader className="p-4">
                     <DialogTitle className="flex items-center gap-2">
                         <Shield className="h-5 w-5 text-primary" />
                         Share Password Entry
@@ -109,7 +120,43 @@ export function SharePasswordDialog({
                 </DialogHeader>
                 
                 {!generatedUrl ? (
-                    <div className="space-y-4 py-4">
+                    <div className="space-y-4 py-4 px-4 gap-4 flex flex-col">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="text-xs flex items-center gap-1">
+                                    <Clock className="w-3 h-3" /> Expiration
+                                </Label>
+                                <Select value={expiration} onValueChange={setExpiration} disabled={loading}>
+                                    <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="Expires in" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="0.08333">5 Minutes</SelectItem>
+                                        <SelectItem value="1">1 Hour</SelectItem>
+                                        <SelectItem value="4">4 Hours</SelectItem>
+                                        <SelectItem value="24">1 Day</SelectItem>
+                                        <SelectItem value="168">1 Week</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-xs flex items-center gap-1">
+                                    <Eye className="w-3 h-3" /> Max Views
+                                </Label>
+                                <Select value={maxViews} onValueChange={setMaxViews} disabled={loading}>
+                                    <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="Views" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="1">1 View</SelectItem>
+                                        <SelectItem value="5">5 Views</SelectItem>
+                                        <SelectItem value="10">10 Views</SelectItem>
+                                        <SelectItem value="100">100 Views</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
                         <div className="space-y-2">
                             <Label htmlFor="share-password">Add Password Protection (Optional)</Label>
                             <Input
@@ -133,7 +180,7 @@ export function SharePasswordDialog({
                             </div>
                             <h3 className="text-sm font-semibold text-primary">Secure Link Ready</h3>
                             <p className="text-[10px] text-muted-foreground mt-1">
-                                Valid for 1 hour or until viewed.
+                                Valid for {expiration === "1" ? "1 hour" : expiration === "24" ? "1 day" : expiration === "168" ? "1 week" : expiration === "0.08333" ? "5 minutes" : `${expiration} hours`} or {maxViews === "1" ? "1 view" : `${maxViews} views`}.
                             </p>
                         </div>
                         <div className="flex items-center gap-2">

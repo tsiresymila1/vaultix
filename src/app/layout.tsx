@@ -20,6 +20,7 @@ export const metadata: Metadata = {
 
 import { createClient } from "@/utils/supabase/server";
 import ProgressBarProvider from "@/components/shared/progress-bar-provider";
+import { VaultUnlock } from "@/components/shared/vault-unlock";
 
 export default async function RootLayout({
   children,
@@ -47,6 +48,7 @@ export default async function RootLayout({
         <AuthProvider initialUser={user} initialUserData={userData}>
           <ProgressBarProvider>
             <ThemeSynchronizer />
+            <VaultUnlock />
             {children}
             <Toaster position="top-right" />
           </ProgressBarProvider>

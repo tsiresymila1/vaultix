@@ -175,11 +175,18 @@ export default function RegisterPageContent() {
                         </Button>
                     </form>
 
-                    <p className="px-8 text-center text-sm text-muted-foreground">
-                        <Link href="/login" className="hover:text-brand underline underline-offset-4">
-                            Already have an account? Sign in
-                        </Link>
-                    </p>
+                    <div className="flex flex-col gap-4 text-center mt-6">
+                        <p className="text-sm text-muted-foreground">
+                            <Link href="/login" className="hover:text-brand underline underline-offset-4">
+                                Already have an account? Sign in
+                            </Link>
+                        </p>
+                        <div className="flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
+                            <Link href="/privacy-policy" className="hover:text-primary transition-colors">Privacy Policy</Link>
+                            <span className="w-1 h-1 rounded-full bg-border" />
+                            <Link href="/data-deletion" className="hover:text-primary transition-colors">Data Deletion</Link>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
