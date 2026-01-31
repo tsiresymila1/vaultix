@@ -113,17 +113,7 @@ export default function VaultDetailContent({
     useEffect(() => {
         if (!user || !privateKey || !initialMemberData || vaultKey) return;
 
-        const fetchUserRole = async () => {
-            const { data } = await supabase
-                .from("vault_members")
-                .select("role")
-                .eq("vault_id", id)
-                .eq("user_id", user.id)
-                .single();
-            if (data) setUserRole(data.role);
-        };
-
-        fetchUserRole();
+        if (initialMemberData) setUserRole(initialMemberData.role);
 
         const decryptVK = async () => {
             try {
@@ -419,7 +409,7 @@ export default function VaultDetailContent({
                                 <span>Members</span>
                             </Button>
 
-                            {(userRole === 'owner' || userRole === 'moderator') && (
+                            {(initialMemberData?.role === 'owner' || initialMemberData?.role === 'moderator') && (
                                 <Button
                                     variant="outline"
                                     size="sm"

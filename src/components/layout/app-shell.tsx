@@ -41,7 +41,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             href: "/passwords",
             icon: Lock,
             label: "Password Manager",
-            hidden: !userData || (userData.role !== 'admin' && userData.role !== 'moderator')
         },
         {
             href: "/members",

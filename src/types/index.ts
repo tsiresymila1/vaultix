@@ -56,6 +56,7 @@ export interface MemberData {
     users: {
         public_key: string;
     } | null;
+    role: "owner" | "admin" | "moderator" | "member";
 }
 
 export interface PasswordEntry {

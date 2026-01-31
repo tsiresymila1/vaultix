@@ -1,7 +1,7 @@
+import { Environment, MemberData, Secret } from "@/types";
 import { createClient } from "@/utils/supabase/server";
-import VaultDetailContent from "./vault-detail-content";
 import { notFound, redirect } from "next/navigation";
-import { Environment, Secret, MemberData } from "@/types";
+import VaultDetailContent from "./vault-detail-content";
 
 export default async function VaultDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
@@ -41,7 +41,7 @@ export default async function VaultDetailPage({ params }: { params: Promise<{ id
     // 4. Fetch member data (for vault key decryption)
     const { data: memberData } = await supabase
         .from("vault_members")
-        .select("encrypted_vault_key, users(public_key)")
+        .select("encrypted_vault_key, users(public_key), role")
         .eq("vault_id", id)
         .eq("user_id", user.id)
         .single();
