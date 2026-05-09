@@ -56,3 +56,5 @@ yarn-error.log*
 next-env.d.ts
 
 ./cli/bin/*
+
+graphify-out/cache
