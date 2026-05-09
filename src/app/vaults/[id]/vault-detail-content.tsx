@@ -575,7 +575,7 @@ export default function VaultDetailContent({
                                                 />
                                             </TableHead>
                                             <TableHead className="text-[10px] font-bold text-muted-foreground py-3 uppercase tracking-widest">Key</TableHead>
-                                            <TableHead className="text-[10px] font-bold text-muted-foreground py-3 uppercase tracking-widest">Value</TableHead>
+                                            <TableHead className="text-[10px] font-bold text-muted-foreground py-3 uppercase tracking-widest w-[300px]">Value</TableHead>
                                             <TableHead className="text-[10px] font-bold text-muted-foreground py-3 pr-6 text-right uppercase tracking-widest">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -624,20 +624,22 @@ export default function VaultDetailContent({
                                                                 />
                                                             ) : (
                                                                 <>
-                                                                    <code className={cn(
-                                                                        "px-2 py-1 rounded text-[11px] transition-all",
-                                                                        showValues[secret.id]
-                                                                            ? "bg-primary/10 text-primary font-bold"
-                                                                            : "bg-secondary text-muted-foreground/50 select-none font-mono"
-                                                                    )}>
-                                                                        {showValues[secret.id]
-                                                                            ? (decryptedSecrets[secret.id] || "Loading...")
-                                                                            : "••••••••••••••••••••"}
-                                                                    </code>
+                                                                    <div className="max-w-[250px] overflow-x-auto scrollbar-hide">
+                                                                        <code className={cn(
+                                                                            "px-2 py-1 rounded text-[11px] transition-all whitespace-nowrap block",
+                                                                            showValues[secret.id]
+                                                                                ? "bg-primary/10 text-primary font-bold"
+                                                                                : "bg-secondary text-muted-foreground/50 select-none font-mono"
+                                                                        )}>
+                                                                            {showValues[secret.id]
+                                                                                ? (decryptedSecrets[secret.id] || "Loading...")
+                                                                                : "••••••••••••••••••••"}
+                                                                        </code>
+                                                                    </div>
                                                                     <Button
                                                                         variant="ghost"
                                                                         size="icon"
-                                                                        className="h-7 w-7 rounded-md hover:bg-secondary"
+                                                                        className="h-7 w-7 rounded-md hover:bg-secondary shrink-0"
                                                                         onClick={() => toggleSecretValue(secret)}
                                                                     >
                                                                         {showValues[secret.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
