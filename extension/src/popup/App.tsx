@@ -1,27 +1,40 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Shield, Unlock, Copy, Eye, EyeOff, LogOut, Plus } from 'lucide-react';
+import { Shield, Unlock, Copy, Eye, EyeOff, LogOut, Plus, ExternalLink, RefreshCw } from 'lucide-react';
 import { deriveMasterKey, fromBase64, toBase64, decryptSecret, decryptPrivateKey } from '../shared/crypto';
-import type { PasswordEntry, UserData } from '../shared/types';
+import type { PasswordEntry } from '../shared/types';
 
 declare const sodium: typeof import('libsodium-wrappers-sumo');
 
 const STORAGE_KEYS = {
   masterKey: 'vaultix_master_key',
   userData: 'vaultix_user_data',
-  isUnlocked: 'vaultix_is_unlocked'
+  isUnlocked: 'vaultix_is_unlocked',
+  accessToken: 'vaultix_access_token'
 };
+
+const VAULTIX_URL = 'http://localhost:3000';
+
+interface ExtensionUserData {
+  id: string;
+  email: string;
+  public_key: string;
+  encrypted_private_key: string;
+  private_key_nonce: string;
+  master_key_salt: string;
+  full_name?: string;
+}
 
 export default function App() {
   const [loading, setLoading] = useState(true);
-  const [initLoading, setInitLoading] = useState(false);
+  const [authenticating, setAuthenticating] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [password, setPassword] = useState('');
   const [passwords, setPasswords] = useState<PasswordEntry[]>([]);
   const [search, setSearch] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [userData, setUserData] = useState<UserData | null>(null);
+  const [userData, setUserData] = useState<ExtensionUserData | null>(null);
 
   useEffect(() => {
     initApp();
@@ -30,31 +43,117 @@ export default function App() {
   const initApp = async () => {
     try {
       await sodium.ready;
-      const result = await chrome.storage.local.get([STORAGE_KEYS.isUnlocked, STORAGE_KEYS.userData]);
-      if (result[STORAGE_KEYS.isUnlocked] && result[STORAGE_KEYS.userData]) {
+
+      // Check for token and private key in URL (returned from OAuth flow)
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token');
+      const privateKey = urlParams.get('private_key');
+      const email = urlParams.get('email');
+      const masterKeySalt = urlParams.get('master_key_salt');
+      const encryptedPrivateKey = urlParams.get('encrypted_private_key');
+      const privateKeyNonce = urlParams.get('private_key_nonce');
+
+      if (token && privateKey && email && masterKeySalt && encryptedPrivateKey && privateKeyNonce) {
+        const userData: ExtensionUserData = {
+          id: '',
+          email,
+          public_key: '',
+          encrypted_private_key: encryptedPrivateKey,
+          private_key_nonce: privateKeyNonce,
+          master_key_salt: masterKeySalt
+        };
+
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.accessToken]: token,
+          [STORAGE_KEYS.userData]: userData,
+          [STORAGE_KEYS.masterKey]: { key: privateKey, privateKey: privateKey },
+          [STORAGE_KEYS.isUnlocked]: true
+        });
+
+        window.history.replaceState({}, '', window.location.pathname);
         setUnlocked(true);
-        setUserData(result[STORAGE_KEYS.userData] as UserData);
-        await loadPasswords();
+        setUserData(userData);
+      } else {
+        const result = await chrome.storage.local.get([
+          STORAGE_KEYS.accessToken,
+          STORAGE_KEYS.userData,
+          STORAGE_KEYS.isUnlocked
+        ]);
+
+        if (result[STORAGE_KEYS.isUnlocked] && result[STORAGE_KEYS.userData]) {
+          setUnlocked(true);
+          setUserData(result[STORAGE_KEYS.userData] as ExtensionUserData);
+          await loadPasswords();
+        } else if (result[STORAGE_KEYS.accessToken]) {
+          await fetchUserData(result[STORAGE_KEYS.accessToken]);
+        }
       }
     } catch (err) {
-      console.error('Error checking status:', err);
+      console.error('Error initializing app:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchUserData = async (token: string) => {
+    try {
+      setAuthenticating(true);
+
+      const response = await fetch(`${VAULTIX_URL}/api/extension/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          await chrome.storage.local.remove([STORAGE_KEYS.accessToken]);
+          return;
+        }
+        throw new Error('Failed to fetch user data');
+      }
+
+      const data = await response.json();
+
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.userData]: data.user
+      });
+
+      setUserData(data.user);
+    } catch (err) {
+      console.error('Error fetching user data:', err);
+      setError('Failed to connect to Vaultix. Please sign in again.');
+    } finally {
+      setAuthenticating(false);
+    }
+  };
+
+  const handleOAuthLogin = async () => {
+    const redirectUri = `chrome-extension://${chrome.runtime.id}/popup/index.html`;
+    const authUrl = `${VAULTIX_URL}/api/extension/auth?callback=${encodeURIComponent(redirectUri)}`;
+
+    await chrome.tabs.create({ url: authUrl });
+  };
+
   const loadPasswords = async () => {
     try {
-      const { data: userResult } = await chrome.storage.local.get(STORAGE_KEYS.userData);
-      if (!userResult) return;
+      const tokenResult = await chrome.storage.local.get(STORAGE_KEYS.accessToken);
+      const token = tokenResult[STORAGE_KEYS.accessToken];
 
-      const result = await chrome.storage.local.get(STORAGE_KEYS.masterKey);
-      const masterKey = result[STORAGE_KEYS.masterKey];
-      
-      if (!masterKey) return;
+      if (!token) return;
 
-      // For now, show empty - in production would fetch from Supabase via message to background
-      setPasswords([]);
+      const response = await fetch(`${VAULTIX_URL}/api/extension/passwords`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPasswords(data.passwords || []);
+      }
     } catch (err) {
       console.error('Error loading passwords:', err);
     }
@@ -63,27 +162,24 @@ export default function App() {
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setInitLoading(true);
+    setAuthenticating(true);
 
     try {
       await sodium.ready;
-      
-      const storageResult = await chrome.storage.local.get(STORAGE_KEYS.userData);
-      const storedUserData = storageResult[STORAGE_KEYS.userData] as UserData | undefined;
-      
-      if (!storedUserData?.master_key_salt) {
-        setError('No salt found. Please sign in from the web app first.');
-        setInitLoading(false);
+
+      if (!userData?.master_key_salt) {
+        setError('No user data found. Please sign in first.');
+        setAuthenticating(false);
         return;
       }
 
-      const salt = await fromBase64(storedUserData.master_key_salt);
+      const salt = await fromBase64(userData.master_key_salt);
       const masterKey = await deriveMasterKey(password, salt);
       const masterKeyB64 = await toBase64(masterKey);
 
       const decryptedPrivateKey = await decryptPrivateKey(
-        storedUserData.encrypted_private_key,
-        storedUserData.private_key_nonce,
+        userData.encrypted_private_key,
+        userData.private_key_nonce,
         masterKey
       );
 
@@ -93,7 +189,6 @@ export default function App() {
       });
 
       setUnlocked(true);
-      setUserData(storedUserData);
       setPassword('');
       await loadPasswords();
       toast.success('Vault unlocked');
@@ -101,7 +196,7 @@ export default function App() {
       console.error('Unlock error:', err);
       setError(err instanceof Error ? err.message : 'Invalid password');
     } finally {
-      setInitLoading(false);
+      setAuthenticating(false);
     }
   };
 
@@ -110,6 +205,19 @@ export default function App() {
     setUnlocked(false);
     setPasswords([]);
     toast.success('Vault locked');
+  };
+
+  const handleSignOut = async () => {
+    await chrome.storage.local.remove([
+      STORAGE_KEYS.masterKey,
+      STORAGE_KEYS.userData,
+      STORAGE_KEYS.isUnlocked,
+      STORAGE_KEYS.accessToken
+    ]);
+    setUnlocked(false);
+    setUserData(null);
+    setPasswords([]);
+    toast.success('Signed out');
   };
 
   const handleCopyPassword = async (entry: PasswordEntry) => {
@@ -138,12 +246,17 @@ export default function App() {
     (p.website_url || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  if (loading) {
+  if (loading || authenticating) {
     return (
       <div className="container">
         <div className="loading">
           <div className="spinner" />
         </div>
+        {authenticating && (
+          <p style={{ textAlign: 'center', marginTop: '12px', fontSize: '12px', color: '#94a3b8' }}>
+            Connecting to Vaultix...
+          </p>
+        )}
       </div>
     );
   }
@@ -162,10 +275,24 @@ export default function App() {
         </div>
       </div>
 
-      {!unlocked ? (
+      {!userData ? (
+        <div className="unlock-form">
+          {error && <div className="error-message">{error}</div>}
+
+          <div className="empty-state" style={{ padding: '20px 0' }}>
+            <p style={{ marginBottom: '16px', fontSize: '13px', color: '#94a3b8' }}>
+              Sign in with your Vaultix account to access your passwords
+            </p>
+            <button className="btn-primary" onClick={handleOAuthLogin}>
+              <ExternalLink size={16} />
+              Sign In with Vaultix
+            </button>
+          </div>
+        </div>
+      ) : !unlocked ? (
         <form className="unlock-form" onSubmit={handleUnlock}>
           {error && <div className="error-message">{error}</div>}
-          
+
           <div className="form-group">
             <label>Master Password</label>
             <div style={{ position: 'relative' }}>
@@ -195,8 +322,24 @@ export default function App() {
             </div>
           </div>
 
-          <button type="submit" className="btn-primary" disabled={loading || !password}>
-            {loading ? <div className="spinner" /> : <><Unlock size={16} /> Unlock</>}
+          <button type="submit" className="btn-primary" disabled={authenticating || !password}>
+            {authenticating ? <div className="spinner" /> : <><Unlock size={16} /> Unlock</>}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSignOut}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#64748b',
+              fontSize: '12px',
+              cursor: 'pointer',
+              marginTop: '8px',
+              width: '100%'
+            }}
+          >
+            Sign out and use different account
           </button>
         </form>
       ) : (
@@ -238,7 +381,7 @@ export default function App() {
             <LogOut size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
             Lock
           </button>
-          <button onClick={() => window.open('https://vaultix.dev/passwords', '_blank')}>
+          <button onClick={() => window.open(`${VAULTIX_URL}/passwords`, '_blank')}>
             <Plus size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
             Add New
           </button>
