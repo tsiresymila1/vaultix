@@ -69,15 +69,29 @@ function LoginContent() {
 
             setStatus("redirecting");
             
-            const redirectUrl = new URL(callback);
-            redirectUrl.searchParams.set("token", token);
-            redirectUrl.searchParams.set("email", email);
-            redirectUrl.searchParams.set("private_key", privateKey);
-            redirectUrl.searchParams.set("master_key_salt", userData.master_key_salt as string);
-            redirectUrl.searchParams.set("encrypted_private_key", userData.encrypted_private_key as string);
-            redirectUrl.searchParams.set("private_key_nonce", userData.private_key_nonce as string);
+            // For Chrome extensions, we need to send the data via message
+            // Instead of redirect, we'll use the extension's popup URL with hash params
+            const hashParams = new URLSearchParams();
+            hashParams.set("token", token);
+            hashParams.set("email", email);
+            hashParams.set("private_key", privateKey);
+            hashParams.set("master_key_salt", userData.master_key_salt as string);
+            hashParams.set("encrypted_private_key", userData.encrypted_private_key as string);
+            hashParams.set("private_key_nonce", userData.private_key_nonce as string);
 
-            window.location.href = redirectUrl.toString();
+            // Open the extension popup directly with hash data
+            const extensionUrl = `chrome-extension://${chrome.runtime.id}/popup/index.html#${hashParams.toString()}`;
+            
+            // Try to focus existing tab first
+            const tabs = await chrome.tabs.query({});
+            const extTab = tabs.find(t => t.url?.includes(`chrome-extension://${chrome.runtime.id}`));
+            
+            if (extTab) {
+                await chrome.tabs.update(extTab.id, { url: extensionUrl });
+                window.close();
+            } else {
+                window.location.href = extensionUrl;
+            }
         } catch (error) {
             console.error("Auth error:", error);
             setStatus("idle");

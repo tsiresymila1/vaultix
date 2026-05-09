@@ -44,6 +44,7 @@ export function VaultUnlock() {
     pathname === "/login" ||
     pathname === "/register" ||
     pathname.startsWith("/cli") ||
+    pathname.startsWith("/extension") ||
     pathname.startsWith("/share/");
 
   useEffect(() => {

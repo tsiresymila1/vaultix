@@ -13,7 +13,7 @@ const STORAGE_KEYS = {
   accessToken: 'vaultix_access_token'
 };
 
-const VAULTIX_URL = 'http://localhost:3000';
+const VAULTIX_URL = 'https://vaultix-secure.vercel.app';
 
 interface ExtensionUserData {
   id: string;
@@ -40,19 +40,19 @@ export default function App() {
     initApp();
   }, []);
 
-  const initApp = async () => {
+const initApp = async () => {
     try {
       await sodium.ready;
-
-      // Check for token and private key in URL (returned from OAuth flow)
-      const urlParams = new URLSearchParams(window.location.search);
-      const token = urlParams.get('token');
-      const privateKey = urlParams.get('private_key');
-      const email = urlParams.get('email');
-      const masterKeySalt = urlParams.get('master_key_salt');
-      const encryptedPrivateKey = urlParams.get('encrypted_private_key');
-      const privateKeyNonce = urlParams.get('private_key_nonce');
-
+      
+      // Check for token and private key in URL hash (returned from OAuth flow)
+      const hashParams = new URLSearchParams(window.location.hash.slice(1));
+      const token = hashParams.get('token');
+      const privateKey = hashParams.get('private_key');
+      const email = hashParams.get('email');
+      const masterKeySalt = hashParams.get('master_key_salt');
+      const encryptedPrivateKey = hashParams.get('encrypted_private_key');
+      const privateKeyNonce = hashParams.get('private_key_nonce');
+      
       if (token && privateKey && email && masterKeySalt && encryptedPrivateKey && privateKeyNonce) {
         const userData: ExtensionUserData = {
           id: '',
@@ -62,15 +62,16 @@ export default function App() {
           private_key_nonce: privateKeyNonce,
           master_key_salt: masterKeySalt
         };
-
+        
         await chrome.storage.local.set({
           [STORAGE_KEYS.accessToken]: token,
           [STORAGE_KEYS.userData]: userData,
           [STORAGE_KEYS.masterKey]: { key: privateKey, privateKey: privateKey },
           [STORAGE_KEYS.isUnlocked]: true
         });
-
-        window.history.replaceState({}, '', window.location.pathname);
+        
+        // Clear the hash
+        window.location.hash = '';
         setUnlocked(true);
         setUserData(userData);
       } else {
