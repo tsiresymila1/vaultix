@@ -17,9 +17,6 @@ cli/src/commands/*.js.map
 cli/src/commands/*.d.ts
 cli/src/commands/*.d.ts.map
 /cli/node_modules
-
-extension/dist
-extension/node_modules
 /.pnp
 .pnp.*
 .yarn/*
