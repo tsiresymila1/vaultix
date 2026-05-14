@@ -16,7 +16,11 @@ export default defineConfig({
         entryFileNames: '[name]/[name].js',
         chunkFileNames: 'chunks/[name].js',
         assetFileNames: 'assets/[name].[ext]'
-      }
+      },
+      external: ['libsodium-wrappers']
     }
+  },
+  define: {
+    global: 'globalThis'
   }
 });

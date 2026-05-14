@@ -1,6 +1,40 @@
 // Content Script for Vaultix Chrome Extension
 // Detects login forms and provides autofill functionality
 
+// Only run autofill logic on non-localhost (production)
+const hostname = window.location.hostname;
+const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('localhost:');
+const isVaultixApp = hostname.includes('vaultix') || hostname.includes('vercel');
+
+let shouldSkipAutofill = isLocalhost || isVaultixApp;
+
+if (shouldSkipAutofill) {
+  console.log('Vaultix: Skipping autofill on', hostname);
+}
+
+// Listen for messages from the web page (for auth flow) - works on all pages
+window.addEventListener('message', async (event) => {
+  if (event.data?.action === 'VAULTIX_AUTH_FROM_PAGE') {
+    console.log('Vaultix: Received auth data from web page, forwarding to background...');
+    // Forward to background script
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'VAULTIX_AUTH_DATA',
+        payload: event.data
+      });
+      console.log('Vaultix: Forwarded to background, response:', response);
+    } catch (err) {
+      console.error('Vaultix: Failed to forward to background:', err);
+    }
+  }
+});
+
+if (shouldSkipAutofill) {
+  // Don't run autofill logic on localhost/Vaultix, but keep message listener active
+  console.log('Vaultix content script: skipping autofill, message listener active');
+  // Don't throw - we need the message listener to stay active
+}
+
 interface VaultixMessage {
   action: string;
   payload?: unknown;
@@ -201,12 +235,23 @@ if (document.readyState === 'loading') {
   init();
 }
 
-// Also watch for dynamically added forms
+// Watch for dynamically added forms (but not our own indicator)
+let isInitialized = false;
+
 const observer = new MutationObserver((mutations) => {
+  if (isInitialized) return;
+  
   for (const mutation of mutations) {
-    if (mutation.addedNodes.length > 0) {
-      init();
-      break;
+    for (const node of mutation.addedNodes) {
+      // Skip our own indicator element
+      if (node.nodeType === Node.ELEMENT_NODE && (node as Element).id === 'vaultix-indicator') {
+        continue;
+      }
+      if (mutation.addedNodes.length > 0 && !isInitialized) {
+        init();
+        isInitialized = true;
+        break;
+      }
     }
   }
 });
@@ -216,4 +261,8 @@ observer.observe(document.documentElement, {
   subtree: true
 });
 
-console.log('Vaultix content script loaded');
+// Initial run (only once)
+if (!isInitialized) {
+  init();
+  isInitialized = true;
+}

@@ -38,9 +38,52 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
     case 'SAVE_PASSWORD':
       return await savePassword(message.payload as { username: string; password: string; url: string });
       
+    case 'VAULTIX_AUTH_DATA':
+      // Store auth data from web auth flow
+      return await handleWebAuthData(message.payload as any);
+      
     default:
       return { error: 'Unknown action' };
   }
+}
+
+async function handleWebAuthData(data: any) {
+  console.log('Background: Received auth data', data);
+  
+  // Extract the actual auth data (could be nested in payload or at top level)
+  const authData = data.token ? data : (data.payload || data);
+  const { token, email, privateKey, masterKeySalt, encryptedPrivateKey, privateKeyNonce } = authData;
+  
+  console.log('Background: Processing auth for', email);
+  const userData = {
+    id: '',
+    email: email,
+    public_key: '',
+    encrypted_private_key: encryptedPrivateKey,
+    private_key_nonce: privateKeyNonce,
+    master_key_salt: masterKeySalt
+  };
+
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.accessToken]: token,
+    [STORAGE_KEYS.userData]: userData,
+    [STORAGE_KEYS.masterKey]: { key: privateKey, privateKey: privateKey },
+    [STORAGE_KEYS.isUnlocked]: true
+  });
+  
+  console.log('Background: Auth data stored in chrome.storage');
+
+  // Notify popup if it's open
+  try {
+    const views = chrome.extension.getViews({ type: 'popup' });
+    if (views.length > 0) {
+      views[0].postMessage({ action: 'VAULTIX_AUTH_DATA_RECEIVED' }, '*');
+    }
+  } catch (e) {
+    console.log('Could not notify popup');
+  }
+
+  return { success: true };
 }
 
 async function getUnlockStatus() {

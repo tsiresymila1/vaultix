@@ -43,6 +43,10 @@ export function VaultUnlock() {
     pathname === "/" ||
     pathname === "/login" ||
     pathname === "/register" ||
+    pathname === "/docs" ||
+    pathname === "/share" ||
+    pathname === "/data-deletion" ||
+    pathname === "/privacy-policy" ||
     pathname.startsWith("/cli") ||
     pathname.startsWith("/extension") ||
     pathname.startsWith("/share/");
