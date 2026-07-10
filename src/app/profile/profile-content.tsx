@@ -19,7 +19,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/context/auth-context";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
+import { api, bearer } from "@/lib/http/client";
 import {
   toBase64,
   fromBase64,
@@ -31,7 +32,7 @@ import {
   generateUserKeyPair,
   generateSalt,
 } from "@/lib/crypto";
-import { UserData, PasswordEntry } from "@/types";
+import { PasswordEntry } from "@/types";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -45,7 +46,7 @@ import {
   Shield,
   User,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 interface PasswordStrength {
@@ -73,18 +74,23 @@ function checkPasswordStrength(password: string): PasswordStrength {
   };
 }
 
-interface ProfilePageContentProps {
-  initialUserData: UserData | null;
-}
-
-export default function ProfilePageContent({
-  initialUserData,
-}: ProfilePageContentProps) {
-  const { user } = useAuth();
+export default function ProfilePageContent() {
+  const { user, userData, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [userData, setUserData] = useState<UserData | null>(initialUserData);
 
-  const [fullName, setFullName] = useState(initialUserData?.full_name || "");
+  // Live query of the current user's password entries + owned vaults/memberships,
+  // used for re-encryption and data-reset flows.
+  const { data: relData } = db.useQuery(
+    userData
+      ? {
+          passwordEntries: { $: { where: { "owner.id": userData.id } } },
+          vaultMembers: { $: { where: { "member.id": userData.id } } },
+          vaults: { $: { where: { "owner.id": userData.id } } },
+        }
+      : null,
+  );
+
+  const [fullName, setFullName] = useState(userData?.fullName || "");
   const [email, setEmail] = useState(user?.email || "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -104,29 +110,14 @@ export default function ProfilePageContent({
     hasSpecial: false,
   });
 
-  const fetchUserData = useCallback(async () => {
-    if (!user) return;
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-      if (error) throw error;
-      setUserData(data);
-      setFullName(data.full_name || "");
-      setEmail(user.email || "");
-    } catch (error) {
-      console.error("Error fetching user data:", error);
-    }
-  }, [user]);
+  // Sync local form state from the live profile / auth data.
+  useEffect(() => {
+    if (userData?.fullName) setFullName(userData.fullName);
+  }, [userData]);
 
   useEffect(() => {
-    // Redundant fetch on mount skipped due to SSR initialUserData
-    if (!initialUserData && user) {
-      fetchUserData();
-    }
-  }, [user, fetchUserData, initialUserData]);
+    if (user?.email) setEmail(user.email);
+  }, [user]);
 
   useEffect(() => {
     setPasswordStrength(checkPasswordStrength(newPassword));
@@ -136,25 +127,27 @@ export default function ProfilePageContent({
     e.preventDefault();
     setLoading(true);
     try {
-      if (!user) throw new Error("No user found");
+      if (!user || !userData) throw new Error("No user found");
 
-      // Update local profile data
-      const { error: profileError } = await supabase
-        .from("users")
-        .update({ full_name: fullName })
-        .eq("id", user.id);
+      // Update local profile data (live query auto-refreshes the UI).
+      await db.transact(db.tx.profiles[userData.id].update({ fullName }));
 
-      if (profileError) throw profileError;
-
-      // Update Auth email if changed (triggers confirmation)
+      // Email lives on the immutable $users auth identity; the server route
+      // reports whether a change is possible.
       if (email !== user.email) {
-        const { error: authError } = await supabase.auth.updateUser({ email });
-        if (authError) throw authError;
-        toast.info("Validation email sent to new address");
+        const authUser = await db.getAuth();
+        const res = await api.account.email.$post(
+          { json: { newEmail: email } },
+          { headers: bearer(authUser?.refresh_token) },
+        );
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          setEmail(user.email);
+          toast.info(body.error ?? "Email change is not supported");
+        }
       }
 
       toast.success("Profile updated successfully");
-      fetchUserData();
     } catch (error) {
       console.error("Error updating profile:", error);
       const message =
@@ -196,41 +189,37 @@ export default function ProfilePageContent({
 
     setPasswordLoading(true);
     try {
-      const { error: verifyError } = await supabase.auth.signInWithPassword({
-        email: user.email || "",
-        password: currentPassword,
-      });
-
-      if (verifyError) {
-        throw new Error("Current password is incorrect");
+      if (!userData) {
+        throw new Error("Profile not loaded");
       }
 
-      const { data: userData } = await supabase
-        .from("users")
-        .select("master_key_salt, encrypted_private_key, private_key_nonce")
-        .eq("id", user.id)
-        .single();
-
-      if (!userData?.master_key_salt) {
+      if (!userData.masterKeySalt) {
         throw new Error("User salt not found");
       }
 
-      const salt = await fromBase64(userData.master_key_salt);
+      const salt = await fromBase64(userData.masterKeySalt);
       const oldMasterKey = await deriveMasterKey(currentPassword, salt);
       const newMasterKey = await deriveMasterKey(newPassword, salt);
 
       const oldMasterKeyB64 = await toBase64(oldMasterKey);
       const newMasterKeyB64 = await toBase64(newMasterKey);
 
-      let encryptedPrivateKey = userData.encrypted_private_key;
-      let privateKeyNonce = userData.private_key_nonce;
+      let encryptedPrivateKey = userData.encryptedPrivateKey;
+      let privateKeyNonce = userData.privateKeyNonce;
 
       if (encryptedPrivateKey && privateKeyNonce) {
-        const decryptedPrivateKey = await decryptPrivateKey(
-          encryptedPrivateKey,
-          privateKeyNonce,
-          oldMasterKey,
-        );
+        let decryptedPrivateKey: string;
+        try {
+          // Decrypting the private key with the derived old master key also
+          // verifies that the supplied current password is correct.
+          decryptedPrivateKey = await decryptPrivateKey(
+            encryptedPrivateKey,
+            privateKeyNonce,
+            oldMasterKey,
+          );
+        } catch {
+          throw new Error("Current password is incorrect");
+        }
         const reEncrypted = await encryptPrivateKey(
           decryptedPrivateKey,
           newMasterKey,
@@ -239,73 +228,66 @@ export default function ProfilePageContent({
         privateKeyNonce = reEncrypted.nonce;
       }
 
-      const { data: passwordEntries } = await supabase
-        .from("password_entries")
-        .select("*")
-        .eq("user_id", user.id);
+      const passwordEntries =
+        (relData?.passwordEntries as PasswordEntry[] | undefined) ?? [];
 
-      if (passwordEntries && passwordEntries.length > 0) {
-        for (const entry of passwordEntries) {
-          const updates: Record<string, unknown> = {};
+      const txs = [];
 
-          if (entry.encrypted_password && entry.password_nonce) {
-            try {
-              const decryptedPass = await decryptSecret(
-                entry.encrypted_password,
-                entry.password_nonce,
-                oldMasterKeyB64,
-              );
-              const reEncrypted = await encryptSecret(
-                decryptedPass,
-                newMasterKeyB64,
-              );
-              updates.encrypted_password = reEncrypted.cipher;
-              updates.password_nonce = reEncrypted.nonce;
-            } catch (err) {
-              console.warn("Could not re-encrypt password entry:", entry.id);
-            }
+      for (const entry of passwordEntries) {
+        const updates: Record<string, unknown> = {};
+
+        if (entry.encryptedPassword && entry.passwordNonce) {
+          try {
+            const decryptedPass = await decryptSecret(
+              entry.encryptedPassword,
+              entry.passwordNonce,
+              oldMasterKeyB64,
+            );
+            const reEncrypted = await encryptSecret(
+              decryptedPass,
+              newMasterKeyB64,
+            );
+            updates.encryptedPassword = reEncrypted.cipher;
+            updates.passwordNonce = reEncrypted.nonce;
+          } catch {
+            console.warn("Could not re-encrypt password entry:", entry.id);
           }
+        }
 
-          if (entry.encrypted_otp_seed && entry.otp_nonce) {
-            try {
-              const decryptedOtp = await decryptSecret(
-                entry.encrypted_otp_seed,
-                entry.otp_nonce,
-                oldMasterKeyB64,
-              );
-              const reEncrypted = await encryptSecret(
-                decryptedOtp,
-                newMasterKeyB64,
-              );
-              updates.encrypted_otp_seed = reEncrypted.cipher;
-              updates.otp_nonce = reEncrypted.nonce;
-            } catch (err) {
-              console.warn("Could not re-encrypt OTP seed:", entry.id);
-            }
+        if (entry.encryptedOtpSeed && entry.otpNonce) {
+          try {
+            const decryptedOtp = await decryptSecret(
+              entry.encryptedOtpSeed,
+              entry.otpNonce,
+              oldMasterKeyB64,
+            );
+            const reEncrypted = await encryptSecret(
+              decryptedOtp,
+              newMasterKeyB64,
+            );
+            updates.encryptedOtpSeed = reEncrypted.cipher;
+            updates.otpNonce = reEncrypted.nonce;
+          } catch {
+            console.warn("Could not re-encrypt OTP seed:", entry.id);
           }
+        }
 
-          if (Object.keys(updates).length > 0) {
-            await supabase
-              .from("password_entries")
-              .update(updates)
-              .eq("id", entry.id);
-          }
+        if (Object.keys(updates).length > 0) {
+          txs.push(db.tx.passwordEntries[entry.id].update(updates));
         }
       }
 
-      await supabase
-        .from("users")
-        .update({
-          encrypted_private_key: encryptedPrivateKey,
-          private_key_nonce: privateKeyNonce,
-        })
-        .eq("id", user.id);
+      txs.push(
+        db.tx.profiles[userData.id].update({
+          encryptedPrivateKey,
+          privateKeyNonce,
+        }),
+      );
 
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
+      await db.transact(txs);
 
-      if (updateError) throw updateError;
+      // NOTE: the master password is never stored server-side (zero-knowledge);
+      // it only derives the master key, so there is no auth password to update.
 
       toast.success("Password updated successfully - all data re-encrypted");
       setCurrentPassword("");
@@ -323,6 +305,8 @@ export default function ProfilePageContent({
 
   const [resetLoading, setResetLoading] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleResetEncryptedData = async () => {
     if (!user) return;
@@ -330,42 +314,48 @@ export default function ProfilePageContent({
     setShowResetConfirm(false);
     setResetLoading(true);
     try {
-      await supabase.from("password_entries").delete().eq("user_id", user.id);
-      await supabase.from("vault_members").delete().eq("user_id", user.id);
-      await supabase.from("vaults").delete().eq("owner_id", user.id);
-      await supabase.from("vault_keys").delete().eq("user_id", user.id);
+      if (!userData) {
+        throw new Error("Profile not loaded");
+      }
 
-      const { data: userData } = await supabase
-        .from("users")
-        .select("master_key_salt")
-        .eq("id", user.id)
-        .single();
-
-      if (!userData?.master_key_salt) {
+      if (!userData.masterKeySalt) {
         throw new Error("User salt not found");
       }
 
       const keyPair = await generateUserKeyPair();
-      const salt = await fromBase64(userData.master_key_salt);
+      const salt = await fromBase64(userData.masterKeySalt);
       const masterKey = await deriveMasterKey(
         newPassword || currentPassword,
         salt,
       );
-      const masterKeyB64 = await toBase64(masterKey);
 
       const encryptedPrivateKey = await encryptPrivateKey(
         keyPair.privateKey,
         masterKey,
       );
 
-      await supabase
-        .from("users")
-        .update({
-          public_key: keyPair.publicKey,
-          encrypted_private_key: encryptedPrivateKey.cipher,
-          private_key_nonce: encryptedPrivateKey.nonce,
-        })
-        .eq("id", user.id);
+      // Delete the user's password entries, memberships, and owned vaults,
+      // then rotate the keypair on the profile. The vault_keys table has been
+      // dropped, so there is nothing to clear there.
+      const ownedPasswordEntries =
+        (relData?.passwordEntries as PasswordEntry[] | undefined) ?? [];
+      const memberships = relData?.vaultMembers ?? [];
+      const ownedVaults = relData?.vaults ?? [];
+
+      const txs = [
+        ...ownedPasswordEntries.map((e) =>
+          db.tx.passwordEntries[e.id].delete(),
+        ),
+        ...memberships.map((m) => db.tx.vaultMembers[m.id].delete()),
+        ...ownedVaults.map((v) => db.tx.vaults[v.id].delete()),
+        db.tx.profiles[userData.id].update({
+          publicKey: keyPair.publicKey,
+          encryptedPrivateKey: encryptedPrivateKey.cipher,
+          privateKeyNonce: encryptedPrivateKey.nonce,
+        }),
+      ];
+
+      await db.transact(txs);
 
       toast.success("Data reset complete. Please sign out and sign in again.");
     } catch (error) {
@@ -373,6 +363,26 @@ export default function ProfilePageContent({
       toast.error("Failed to reset data");
     } finally {
       setResetLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setShowDeleteConfirm(false);
+    setDeleteLoading(true);
+    try {
+      const authUser = await db.getAuth();
+      const res = await api.account.delete.$delete(
+        {},
+        { headers: bearer(authUser?.refresh_token) },
+      );
+      if (!res.ok) throw new Error("delete failed");
+      toast.success("Account deleted");
+      await signOut();
+      window.location.href = "/login";
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      toast.error("Failed to delete account");
+      setDeleteLoading(false);
     }
   };
 
@@ -405,7 +415,10 @@ export default function ProfilePageContent({
                 {fullName || user.email?.split("@")[0]}
               </CardTitle>
               <CardDescription className="font-mono text-[10px] uppercase tracking-widest mt-1">
-                Member since {new Date(user.created_at).toLocaleDateString()}
+                Member since{" "}
+                {userData?.createdAt
+                  ? new Date(userData.createdAt).toLocaleDateString()
+                  : "—"}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 space-y-3">
@@ -715,10 +728,62 @@ export default function ProfilePageContent({
                     ) : null}
                     Reset Encrypted Data
                   </Button>
+                  <p className="text-[10px] text-muted-foreground mt-4 mb-2">
+                    Permanently delete your account and all associated data. This
+                    cannot be undone.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    disabled={deleteLoading}
+                    className="rounded-md h-8 text-[11px] font-bold uppercase tracking-wider"
+                  >
+                    {deleteLoading ? (
+                      <Loader2 className="h-3 w-3 animate-spin mr-2" />
+                    ) : null}
+                    Delete Account
+                  </Button>
                 </div>
               </form>
             </CardContent>
           </Card>
+
+          <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-destructive">
+                  <AlertTriangle className="h-5 w-5" />
+                  Delete Account?
+                </DialogTitle>
+                <DialogDescription>
+                  This permanently deletes your account, identity, and all data
+                  you own. This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteAccount}
+                  disabled={deleteLoading}
+                  className="flex-1"
+                >
+                  {deleteLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
+                  Yes, Delete Everything
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
             <DialogContent className="sm:max-w-md">
@@ -800,8 +865,8 @@ export default function ProfilePageContent({
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      if (userData?.public_key) {
-                        navigator.clipboard.writeText(userData.public_key);
+                      if (userData?.publicKey) {
+                        navigator.clipboard.writeText(userData.publicKey);
                         toast.success("Public key copied");
                       }
                     }}
@@ -811,7 +876,7 @@ export default function ProfilePageContent({
                   </Button>
                 </div>
                 <div className="p-3 bg-secondary/50 rounded-md border border-border font-mono text-[10px] break-all leading-relaxed text-muted-foreground select-all">
-                  {userData?.public_key ||
+                  {userData?.publicKey ||
                     "Retrieving cryptographic identity..."}
                 </div>
               </div>

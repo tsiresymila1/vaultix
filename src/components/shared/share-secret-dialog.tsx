@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/context/auth-context";
 import { decryptSecret, encryptSecret, generateVaultKey } from "@/lib/crypto";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
+import { id } from "@instantdb/react";
 import { Secret } from "@/types";
 import { Check, Copy, Link as LinkIcon, Loader2, Share2 } from "lucide-react";
 import { useState } from "react";
@@ -41,6 +42,7 @@ export function ShareSecretDialog({
     vaultKey,
     preDecryptedValue,
 }: ShareSecretDialogProps) {
+    const { userData } = useAuth();
     const [loading, setLoading] = useState(false);
     const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
     const [duration, setDuration] = useState("3600"); // Default 1 hour in seconds
@@ -67,7 +69,7 @@ export function ShareSecretDialog({
             } else {
                 const contents = await Promise.all(secrets.map(async (s) => {
                     const val = await decryptSecret(
-                        s.encrypted_payload,
+                        s.encryptedPayload,
                         s.nonce,
                         vaultKey
                     );
@@ -82,28 +84,26 @@ export function ShareSecretDialog({
             // 3. Encrypt the secret with the ephemeral key
             const { cipher, nonce } = await encryptSecret(combinedContent, ephemeralKeyBase64);
 
-            // 4. Calculate expiration
-            const expirationDate = new Date();
-            expirationDate.setSeconds(expirationDate.getSeconds() + parseInt(duration));
+            // 4. Calculate expiration (unix ms)
+            const expiresAt = Date.now() + parseInt(duration) * 1000;
 
-            // 5. Store in Supabase
-            const { data, error } = await supabase
-                .from("shared_secrets")
-                .insert({
-                    encrypted_payload: cipher,
-                    nonce: nonce,
-                    expires_at: expirationDate.toISOString(),
-                    views_remaining: views === "unlimited" ? null : parseInt(views),
-                })
-                .select("id")
-                .single();
-
-            if (error) throw error;
+            // 5. Store in InstantDB
+            const secretId = id();
+            let tx = db.tx.sharedSecrets[secretId].update({
+                encryptedPayload: cipher,
+                nonce: nonce,
+                expiresAt,
+                // "unlimited" is modelled as a very large remaining-view count.
+                viewsRemaining: views === "unlimited" ? Number.MAX_SAFE_INTEGER : parseInt(views),
+                createdAt: Date.now(),
+            });
+            if (userData?.id) tx = tx.link({ creator: userData.id });
+            await db.transact(tx);
 
             // 6. Generate URL with hash fragment containing key
             // The key is NEVER sent to the server in this final form, only used to encrypt before sending
             // Wait, we encrypted with ephemeralKeyBase64. We need to put that in the URL.
-            const url = `${window.location.origin}/share/${data.id}#${ephemeralKeyBase64}`;
+            const url = `${window.location.origin}/share/${secretId}#${ephemeralKeyBase64}`;
             setGeneratedUrl(url);
             toast.success("Share link created!");
         } catch (error) {

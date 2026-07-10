@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Sub-projects with their own tooling + build artifacts.
+    "cli/**",
+    "extension/**",
+    "graphify-out/**",
   ]),
 ]);
 

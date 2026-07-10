@@ -14,8 +14,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
 import { cn } from "@/lib/utils";
+import { Stagger, RevealItem, AnimatePresence } from "@/components/motion";
 import {
   Copy,
   Edit,
@@ -28,6 +29,7 @@ import {
   Search,
   Shield,
   Trash2,
+  Users,
 } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -35,22 +37,91 @@ import { toast } from "sonner";
 
 import { PasswordEntry } from "@/types";
 
-interface PasswordsPageContentProps {
-  initialPasswords: PasswordEntry[];
-}
-
-export default function PasswordsPageContent({
-  initialPasswords,
-}: PasswordsPageContentProps) {
-  const { masterKey } = useAuth();
-  const [passwords, setPasswords] = useState<PasswordEntry[]>(initialPasswords);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialPasswords[0]?.id || null,
+export default function PasswordsPageContent() {
+  const { privateKey, userData } = useAuth();
+  const { data } = db.useQuery(
+    userData
+      ? {
+          passwordEntries: {
+            $: {
+              where: { "owner.id": userData.id },
+              order: { createdAt: "desc" },
+            },
+          },
+        }
+      : null,
   );
+  const passwords = (data?.passwordEntries as PasswordEntry[]) ?? [];
+
+  // Passwords shared with me by other users.
+  const { data: sharesData } = db.useQuery(
+    userData
+      ? {
+          passwordShares: {
+            $: { where: { "recipient.id": userData.id }, order: { createdAt: "desc" } },
+            entry: {},
+            sharedBy: { $user: {} },
+          },
+        }
+      : null,
+  );
+  // A `has: one` nested link may arrive as an object or single-element array.
+  const receivedShares = (sharesData?.passwordShares ?? []).map((s) => {
+    const sharedBy = Array.isArray(s.sharedBy) ? s.sharedBy[0] : s.sharedBy;
+    const by = sharedBy?.$user;
+    return {
+      ...s,
+      entry: Array.isArray(s.entry) ? s.entry[0] : s.entry,
+      sharedByEmail: (Array.isArray(by) ? by[0] : by)?.email ?? null,
+    };
+  });
+
+  const copySharedPassword = async (share: {
+    encryptedKey: string;
+    entry?: { encryptedPassword: string; passwordNonce: string } | null;
+  }) => {
+    if (!privateKey || !userData?.publicKey) {
+      toast.error("Unlock your vault first.");
+      return;
+    }
+    if (!share.entry) {
+      toast.error("This share is no longer available.");
+      return;
+    }
+    try {
+      const { decryptVaultKeyWithPrivateKey, decryptSecret } = await import("@/lib/crypto");
+      // Envelope: unseal the entry key, then decrypt the live entry content.
+      const entryKey = await decryptVaultKeyWithPrivateKey(
+        share.encryptedKey,
+        userData.publicKey,
+        privateKey,
+      );
+      const pass = await decryptSecret(
+        share.entry.encryptedPassword,
+        share.entry.passwordNonce,
+        entryKey,
+      );
+      await navigator.clipboard.writeText(pass);
+      toast.success("Shared password copied");
+    } catch {
+      toast.error("Could not decrypt shared password.");
+    }
+  };
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedId && passwords.length > 0) {
+      setSelectedId(passwords[0].id);
+    }
+  }, [passwords, selectedId]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [shareContent, setShareContent] = useState("");
+  const [shareEntry, setShareEntry] = useState<{
+    id: string;
+    ownerEncryptedKey: string;
+  } | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [idToDelete, setIdToDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -68,26 +139,31 @@ export default function PasswordsPageContent({
   const selectedPassword = passwords.find((p) => p.id === selectedId);
 
   useEffect(() => {
-    if (!selectedId || !masterKey) return;
+    if (!selectedId || !privateKey || !userData?.publicKey) return;
     const entry = passwords.find((p) => p.id === selectedId);
     if (!entry) return;
 
     const decrypt = async () => {
       try {
-        const { toBase64, decryptSecret } = await import("@/lib/crypto");
-        const b64MK = await toBase64(masterKey);
+        const { decryptVaultKeyWithPrivateKey, decryptSecret } = await import("@/lib/crypto");
+        // Envelope: unseal the entry key with our private key, then decrypt.
+        const entryKey = await decryptVaultKeyWithPrivateKey(
+          entry.ownerEncryptedKey,
+          userData.publicKey,
+          privateKey,
+        );
 
         const pass = await decryptSecret(
-          entry.encrypted_password,
-          entry.password_nonce,
-          b64MK,
+          entry.encryptedPassword,
+          entry.passwordNonce,
+          entryKey,
         );
         let otp: string | undefined;
-        if (entry.encrypted_otp_seed && entry.otp_nonce) {
+        if (entry.encryptedOtpSeed && entry.otpNonce) {
           otp = await decryptSecret(
-            entry.encrypted_otp_seed,
-            entry.otp_nonce,
-            b64MK,
+            entry.encryptedOtpSeed,
+            entry.otpNonce,
+            entryKey,
           );
         }
 
@@ -109,13 +185,13 @@ export default function PasswordsPageContent({
     if (!decryptedValues[selectedId]) {
       decrypt();
     }
-  }, [selectedId, masterKey, passwords, decryptedValues]);
+  }, [selectedId, privateKey, userData?.publicKey, passwords, decryptedValues]);
 
   const filteredPasswords = passwords.filter(
     (p) =>
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.website_url?.toLowerCase().includes(searchQuery.toLowerCase()),
+      p.websiteUrl?.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const handleCopy = (text: string, label: string) => {
@@ -134,9 +210,13 @@ export default function PasswordsPageContent({
     }
 
     const vals = decryptedValues[selectedPassword.id];
-    const content = `Title: ${selectedPassword.title}\nURL: ${selectedPassword.website_url || ""}\nUsername: ${selectedPassword.username || ""}\nPassword: ${vals.pass}${vals.otp ? `\nOTP Seed: ${vals.otp}` : ""}`;
+    const content = `Title: ${selectedPassword.title}\nURL: ${selectedPassword.websiteUrl || ""}\nUsername: ${selectedPassword.username || ""}\nPassword: ${vals.pass}${vals.otp ? `\nOTP Seed: ${vals.otp}` : ""}`;
 
     setShareContent(content);
+    setShareEntry({
+      id: selectedPassword.id,
+      ownerEncryptedKey: selectedPassword.ownerEncryptedKey,
+    });
     setIsShareDialogOpen(true);
   };
 
@@ -144,13 +224,8 @@ export default function PasswordsPageContent({
     if (!idToDelete) return;
     setDeleting(true);
     try {
-      const { error } = await supabase
-        .from("password_entries")
-        .delete()
-        .eq("id", idToDelete);
-      if (error) throw error;
+      await db.transact(db.tx.passwordEntries[idToDelete].delete());
       toast.success("Entry deleted successfully");
-      setPasswords((prev) => prev.filter((p) => p.id !== idToDelete));
       if (selectedId === idToDelete) setSelectedId(null);
       setIsDeleteDialogOpen(false);
     } catch (err) {
@@ -203,10 +278,12 @@ export default function PasswordsPageContent({
           </CardHeader>
           <CardContent className="p-0 flex-1 overflow-y-auto overflow-x-hidden">
             {filteredPasswords.length > 0 ? (
-              <div className="divide-y ">
+              <Stagger className="divide-y ">
+                <AnimatePresence mode="popLayout" initial={false}>
                 {filteredPasswords.map((p) => (
-                  <div
+                  <RevealItem
                     key={p.id}
+                    layout
                     onClick={() => setSelectedId(p.id)}
                     className={cn(
                       "flex items-center gap-3 p-4 border-l-2 cursor-pointer transition-colors hover:bg-secondary/30",
@@ -216,9 +293,9 @@ export default function PasswordsPageContent({
                     )}
                   >
                     <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                      {p.website_url ? (
+                      {p.websiteUrl ? (
                         <Image
-                          src={`https://www.google.com/s2/favicons?domain=${p.website_url}&sz=64`}
+                          src={`https://www.google.com/s2/favicons?domain=${p.websiteUrl}&sz=64`}
                           alt=""
                           width={20}
                           height={20}
@@ -240,15 +317,51 @@ export default function PasswordsPageContent({
                         {p.username || "No username"}
                       </p>
                     </div>
-                  </div>
+                  </RevealItem>
                 ))}
-              </div>
+                </AnimatePresence>
+              </Stagger>
             ) : (
               <div className="flex flex-col items-center justify-center h-full p-8 text-center">
                 <Shield className="h-8 w-8 text-muted-foreground/30 mb-2" />
                 <p className="text-sm text-muted-foreground">
                   No passwords found
                 </p>
+              </div>
+            )}
+
+            {receivedShares.length > 0 && (
+              <div className="border-t">
+                <div className="px-4 py-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                  <Users className="w-3 h-3" /> Shared with me
+                </div>
+                <div className="divide-y">
+                  {receivedShares.map((s) => (
+                    <div key={s.id} className="flex items-center gap-3 p-4">
+                      <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                        <Key className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold truncate">
+                          {s.entry?.title ?? "Shared entry"}
+                        </h3>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {s.entry?.username || "No username"} · from{" "}
+                          {s.sharedByEmail ?? "someone"}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        title="Copy password"
+                        onClick={() => copySharedPassword(s)}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
@@ -262,9 +375,9 @@ export default function PasswordsPageContent({
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 rounded-xl bg-secondary flex items-center justify-center border border-border relative overflow-hidden">
-                      {selectedPassword.website_url ? (
+                      {selectedPassword.websiteUrl ? (
                         <Image
-                          src={`https://www.google.com/s2/favicons?domain=${selectedPassword.website_url}&sz=128`}
+                          src={`https://www.google.com/s2/favicons?domain=${selectedPassword.websiteUrl}&sz=128`}
                           alt={selectedPassword.title}
                           fill
                           className="object-contain p-3"
@@ -277,18 +390,18 @@ export default function PasswordsPageContent({
                       <CardTitle className="text-2xl">
                         {selectedPassword.title}
                       </CardTitle>
-                      {selectedPassword.website_url && (
+                      {selectedPassword.websiteUrl && (
                         <a
                           href={
-                            selectedPassword.website_url.startsWith("http")
-                              ? selectedPassword.website_url
-                              : `https://${selectedPassword.website_url}`
+                            selectedPassword.websiteUrl.startsWith("http")
+                              ? selectedPassword.websiteUrl
+                              : `https://${selectedPassword.websiteUrl}`
                           }
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm text-primary hover:underline flex items-center gap-1 mt-1"
                         >
-                          {selectedPassword.website_url}
+                          {selectedPassword.websiteUrl}
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
@@ -413,7 +526,7 @@ export default function PasswordsPageContent({
                       <div className="flex items-center gap-2">
                         <Input
                           readOnly
-                          value={selectedPassword.website_url || ""}
+                          value={selectedPassword.websiteUrl || ""}
                           className="bg-secondary/30 h-10"
                         />
                         <Button
@@ -421,7 +534,7 @@ export default function PasswordsPageContent({
                           size="icon"
                           onClick={() =>
                             handleCopy(
-                              selectedPassword.website_url || "",
+                              selectedPassword.websiteUrl || "",
                               "URL",
                             )
                           }
@@ -434,7 +547,7 @@ export default function PasswordsPageContent({
                 </div>
                 <div className="w-full">
                   {/* OTP Section (Optional) */}
-                  {selectedPassword.encrypted_otp_seed &&
+                  {selectedPassword.encryptedOtpSeed &&
                     decryptedValues[selectedPassword.id]?.otp && (
                       <OTPAuthenticator
                         secret={decryptedValues[selectedPassword.id].otp || ""}
@@ -470,13 +583,7 @@ export default function PasswordsPageContent({
       <CreatePasswordDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
-        onCreated={async () => {
-          const { data } = await supabase
-            .from("password_entries")
-            .select("*")
-            .order("created_at", { ascending: false });
-          if (data) setPasswords(data);
-        }}
+        onCreated={() => {}}
       />
 
       <CreatePasswordDialog
@@ -489,13 +596,7 @@ export default function PasswordsPageContent({
         decryptedData={
           entryToEdit ? decryptedValues[entryToEdit.id] : undefined
         }
-        onCreated={async () => {
-          const { data } = await supabase
-            .from("password_entries")
-            .select("*")
-            .order("created_at", { ascending: false });
-          if (data) setPasswords(data);
-        }}
+        onCreated={() => {}}
       />
 
       <ConfirmDialog
@@ -511,6 +612,7 @@ export default function PasswordsPageContent({
         open={isShareDialogOpen}
         onOpenChange={setIsShareDialogOpen}
         content={shareContent}
+        entry={shareEntry}
       />
     </div>
   );

@@ -18,7 +18,9 @@ export interface PasswordEntry {
   encrypted_otp_seed: string | null;
   otp_nonce: string | null;
   notes: string | null;
-  created_at: string;
+  sealed_key: string; // entry key sealed to this user's public key
+  shared: boolean;
+  created_at: string | number;
 }
 
 export interface VaultixMessage {

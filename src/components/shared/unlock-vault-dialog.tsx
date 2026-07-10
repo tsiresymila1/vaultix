@@ -37,11 +37,11 @@ export function UnlockVaultDialog({
 
         setLoading(true);
         try {
-            const salt = await fromBase64(userData.master_key_salt);
+            const salt = await fromBase64(userData.masterKeySalt);
             const masterKey = await deriveMasterKey(password, salt);
             const privateKey = await decryptPrivateKey(
-                userData.encrypted_private_key,
-                userData.private_key_nonce,
+                userData.encryptedPrivateKey,
+                userData.privateKeyNonce,
                 masterKey
             );
 

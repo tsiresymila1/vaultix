@@ -41,7 +41,23 @@ export async function decryptSecret(cipherBase64: string, nonceBase64: string, v
 export async function decryptPrivateKey(cipherBase64: string, nonceBase64: string, masterKey: Uint8Array): Promise<string> {
   await sodium.ready;
   const decrypted = sodium.crypto_secretbox_open_easy(sodium.from_base64(cipherBase64), sodium.from_base64(nonceBase64), masterKey);
-  return sodium.to_string(decrypted);
+  // The private key is binary — return it base64-encoded (matches the web app).
+  return sodium.to_base64(decrypted);
+}
+
+// Envelope: unseal a key that was sealed to our public key (crypto_box_seal).
+export async function decryptVaultKey(
+  encryptedKeyBase64: string,
+  userPublicKeyBase64: string,
+  userPrivateKeyBase64: string,
+): Promise<string> {
+  await sodium.ready;
+  const decrypted = sodium.crypto_box_seal_open(
+    sodium.from_base64(encryptedKeyBase64),
+    sodium.from_base64(userPublicKeyBase64),
+    sodium.from_base64(userPrivateKeyBase64),
+  );
+  return sodium.to_base64(decrypted);
 }
 
 export async function generateUserKeyPair(): Promise<{ publicKey: string; privateKey: string }> {

@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/supabase-keepalive",
-      "schedule": "0 0 */5 * *"
+      "path": "/api/cron/cleanup-shared",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

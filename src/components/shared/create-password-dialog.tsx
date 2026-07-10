@@ -17,8 +17,14 @@ import { RefreshCw, Key, Shield } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/auth-context";
-import { supabase } from "@/lib/supabase";
-import { encryptSecret } from "@/lib/crypto";
+import { db } from "@/lib/db";
+import { id } from "@instantdb/react";
+import {
+    encryptSecret,
+    generateVaultKey,
+    encryptVaultKeyForUser,
+    decryptVaultKeyWithPrivateKey,
+} from "@/lib/crypto";
 
 import { PasswordEntry } from "@/types";
 
@@ -37,7 +43,7 @@ export function CreatePasswordDialog({
     editEntry,
     decryptedData,
 }: CreatePasswordDialogProps) {
-    const { user, masterKey } = useAuth();
+    const { privateKey, userData } = useAuth();
     const [loading, setLoading] = useState(false);
     const [title, setTitle] = useState("");
     const [websiteUrl, setWebsiteUrl] = useState("");
@@ -51,7 +57,7 @@ export function CreatePasswordDialog({
     useEffect(() => {
         if (open && editEntry) {
             setTitle(editEntry.title);
-            setWebsiteUrl(editEntry.website_url || "");
+            setWebsiteUrl(editEntry.websiteUrl || "");
             setUsername(editEntry.username || "");
             setNotes(editEntry.notes || "");
             if (decryptedData) {
@@ -80,56 +86,67 @@ export function CreatePasswordDialog({
         }
 
         setLoading(true);
-        if (!masterKey) {
-            toast.error("Encryption session not initialized. Please re-login.");
+        if (!privateKey || !userData?.publicKey) {
+            toast.error("Vault locked. Please unlock first.");
             setLoading(false);
             return;
         }
 
         try {
-            const { toBase64 } = await import("@/lib/crypto");
-            const b64MK = await toBase64(masterKey);
+            // Envelope: on edit, recover the existing entry key (so shares stay
+            // valid); on create, mint a fresh one and seal it to the owner.
+            const entryKey = editEntry
+                ? await decryptVaultKeyWithPrivateKey(
+                      editEntry.ownerEncryptedKey,
+                      userData.publicKey,
+                      privateKey,
+                  )
+                : await generateVaultKey();
 
-            const { cipher: encPassword, nonce: passNonce } = await encryptSecret(password, b64MK);
-            
-            let encOtpSeed = null;
-            let otpNonce = null;
+            const { cipher: encPassword, nonce: passNonce } = await encryptSecret(password, entryKey);
+
+            let encOtpSeed: string | undefined = undefined;
+            let otpNonce: string | undefined = undefined;
             if (otpEnabled && otpSeed.trim()) {
-                const result = await encryptSecret(otpSeed.trim(), b64MK);
+                const result = await encryptSecret(otpSeed.trim(), entryKey);
                 encOtpSeed = result.cipher;
                 otpNonce = result.nonce;
             }
 
-            const payload = {
-                user_id: user?.id,
-                title,
-                website_url: websiteUrl,
-                username,
-                encrypted_password: encPassword,
-                password_nonce: passNonce,
-                encrypted_otp_seed: encOtpSeed,
-                otp_nonce: otpNonce,
-                notes,
-                updated_at: new Date().toISOString(),
-            };
-
             if (editEntry) {
-                const { error } = await supabase
-                    .from("password_entries")
-                    .update(payload)
-                    .eq("id", editEntry.id);
-                if (error) throw error;
+                await db.transact(
+                    db.tx.passwordEntries[editEntry.id].update({
+                        title,
+                        websiteUrl,
+                        username,
+                        encryptedPassword: encPassword,
+                        passwordNonce: passNonce,
+                        encryptedOtpSeed: encOtpSeed,
+                        otpNonce: otpNonce,
+                        notes,
+                        updatedAt: Date.now(),
+                    }),
+                );
                 toast.success("Password entry updated successfully!");
             } else {
-                const { error } = await supabase
-                    .from("password_entries")
-                    .insert(payload);
-                if (error) {
-                    if (error.code === '42P01') {
-                        throw new Error("The 'password_entries' table does not exist in your Supabase database. Please run the migration SQL.");
-                    }
-                    throw error;
-                }
+                const ownerEncryptedKey = await encryptVaultKeyForUser(entryKey, userData.publicKey);
+                await db.transact(
+                    db.tx.passwordEntries[id()]
+                        .update({
+                            title,
+                            websiteUrl,
+                            username,
+                            encryptedPassword: encPassword,
+                            passwordNonce: passNonce,
+                            encryptedOtpSeed: encOtpSeed,
+                            otpNonce: otpNonce,
+                            notes,
+                            ownerEncryptedKey,
+                            createdAt: Date.now(),
+                            updatedAt: Date.now(),
+                        })
+                        .link({ owner: userData.id }),
+                );
                 toast.success("Password entry created successfully!");
             }
 

@@ -19,14 +19,23 @@ import {
   decryptPrivateKey,
   fromBase64,
   generateUserKeyPair,
-  toBase64,
   encryptPrivateKey,
 } from "@/lib/crypto";
 import { usePathname } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
 
 export function VaultUnlock() {
   const { user, userData, masterKey, setKeys, signOut } = useAuth();
+  // The user's own data, used to purge everything on a reset.
+  const { data: resetData } = db.useQuery(
+    userData
+      ? {
+          passwordEntries: { $: { where: { "owner.id": userData.id } } },
+          vaults: { $: { where: { "owner.id": userData.id } } },
+          vaultMembers: { $: { where: { "member.id": userData.id } } },
+        }
+      : null,
+  );
   const [resetLoading, setResetLoading] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [password, setPassword] = useState("");
@@ -65,12 +74,12 @@ export function VaultUnlock() {
 
     setLoading(true);
     try {
-      const salt = await fromBase64(userData.master_key_salt);
+      const salt = await fromBase64(userData.masterKeySalt);
       const derivedKey = await deriveMasterKey(password, salt);
 
       const privateKey = await decryptPrivateKey(
-        userData.encrypted_private_key,
-        userData.private_key_nonce,
+        userData.encryptedPrivateKey,
+        userData.privateKeyNonce,
         derivedKey,
       );
 
@@ -92,37 +101,36 @@ export function VaultUnlock() {
     setShowResetConfirm(false);
     setResetLoading(true);
     try {
-      // Delete all password entries
-      await supabase.from("password_entries").delete().eq("user_id", user.id);
-
-      // Delete all vault memberships (vault_members where user_id = user.id)
-      await supabase.from("vault_members").delete().eq("user_id", user.id);
-
-      // Delete all vaults owned by this user
-      await supabase.from("vaults").delete().eq("owner_id", user.id);
-
-      // Delete any vault keys for this user
-      await supabase.from("vault_keys").delete().eq("user_id", user.id);
-
       // Generate new keypair
       const keyPair = await generateUserKeyPair();
-      const salt = await fromBase64(userData.master_key_salt);
+      const salt = await fromBase64(userData.masterKeySalt);
       const masterKey = await deriveMasterKey(password, salt);
-      const masterKeyB64 = await toBase64(masterKey);
 
       const encryptedPrivateKey = await encryptPrivateKey(
         keyPair.privateKey,
         masterKey,
       );
 
-      await supabase
-        .from("users")
-        .update({
-          public_key: keyPair.publicKey,
-          encrypted_private_key: encryptedPrivateKey.cipher,
-          private_key_nonce: encryptedPrivateKey.nonce,
-        })
-        .eq("id", user.id);
+      const txs = [
+        // Delete all password entries owned by this user
+        ...(resetData?.passwordEntries ?? []).map((p) =>
+          db.tx.passwordEntries[p.id].delete(),
+        ),
+        // Delete all vault memberships for this user
+        ...(resetData?.vaultMembers ?? []).map((m) =>
+          db.tx.vaultMembers[m.id].delete(),
+        ),
+        // Delete all vaults owned by this user
+        ...(resetData?.vaults ?? []).map((v) => db.tx.vaults[v.id].delete()),
+        // Rotate the keypair on the profile
+        db.tx.profiles[userData.id].update({
+          publicKey: keyPair.publicKey,
+          encryptedPrivateKey: encryptedPrivateKey.cipher,
+          privateKeyNonce: encryptedPrivateKey.nonce,
+        }),
+      ];
+
+      await db.transact(txs);
 
       toast.success("Data reset! Sign out and sign in again.");
       setIsOpen(false);
@@ -212,7 +220,7 @@ export function VaultUnlock() {
                 Reset Data
               </Button>
               <p className="text-[10px] text-muted-foreground text-center">
-                Can't unlock? Reset data to recover access (deletes passwords)
+                Can&apos;t unlock? Reset data to recover access (deletes passwords)
               </p>
             </div>
           </DialogFooter>

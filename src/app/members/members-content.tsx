@@ -14,53 +14,28 @@ import {
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { supabase } from "@/lib/supabase";
-import { UserData } from "@/types";
+import { db } from "@/lib/db";
+import type { InstaQLEntity } from "@instantdb/react";
+import type { AppSchema } from "../../../instant.schema";
 import { Ban, CheckCircle, MoreHorizontal, Shield, ShieldCheck, UserCheck, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
-interface MembersPageContentProps {
-    initialMembers: UserData[];
-}
+type MemberProfile = InstaQLEntity<AppSchema, "profiles", { $user: object }>;
 
-export default function MembersPageContent({ initialMembers }: MembersPageContentProps) {
-    const [members, setMembers] = useState<UserData[]>(initialMembers);
-    const [loading, setLoading] = useState(false);
+export default function MembersPageContent() {
+    // Live directory of all profiles (scoped by InstantDB permissions).
+    const { data, isLoading: loading } = db.useQuery({ profiles: { $user: {} } });
+    const members = (data?.profiles ?? []) as MemberProfile[];
 
     // Action State
-    const [actionUser, setActionUser] = useState<UserData | null>(null);
+    const [actionUser, setActionUser] = useState<MemberProfile | null>(null);
     const [actionType, setActionType] = useState<"role" | "status" | null>(null);
     const [targetValue, setTargetValue] = useState<string>("");
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
 
-    useEffect(() => {
-        // Only fetch if we don't have members, though SSR should provide them
-        if (members.length === 0) {
-            fetchMembers();
-        }
-    }, [members.length]);
-
-    const fetchMembers = async () => {
-        try {
-            setLoading(true);
-            const { data, error } = await supabase
-                .from("users")
-                .select("*")
-                .order("created_at", { ascending: false });
-
-            if (error) throw error;
-            setMembers(data || []);
-        } catch (error) {
-            console.error("Error fetching members:", error);
-            toast.error("Failed to load members");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleAction = (user: UserData, type: "role" | "status", value: string) => {
+    const handleAction = (user: MemberProfile, type: "role" | "status", value: string) => {
         setActionUser(user);
         setActionType(type);
         setTargetValue(value);
@@ -74,15 +49,9 @@ export default function MembersPageContent({ initialMembers }: MembersPageConten
             setActionLoading(true);
             const updateData = actionType === "role" ? { role: targetValue } : { status: targetValue };
 
-            const { error } = await supabase
-                .from("users")
-                .update(updateData)
-                .eq("id", actionUser.id);
-
-            if (error) throw error;
+            await db.transact(db.tx.profiles[actionUser.id].update(updateData));
 
             toast.success(`User ${actionType === "role" ? "role" : "status"} updated successfully`);
-            fetchMembers(); // Refresh list
         } catch (error) {
             console.error("Error updating user:", error);
             toast.error("Failed to update user");
@@ -100,7 +69,7 @@ export default function MembersPageContent({ initialMembers }: MembersPageConten
             const roleName = targetValue.charAt(0).toUpperCase() + targetValue.slice(1);
             return {
                 title: `Change Role to ${roleName}`,
-                description: `Are you sure you want to promote/demote ${actionUser?.email} to ${roleName}?`,
+                description: `Are you sure you want to promote/demote ${actionUser?.$user?.email} to ${roleName}?`,
                 confirmText: "Update Role",
                 variant: "default" as const
             };
@@ -108,7 +77,7 @@ export default function MembersPageContent({ initialMembers }: MembersPageConten
             const statusName = targetValue === "restricted" ? "Restrict Access" : targetValue === "banned" ? "Ban User" : "Activate User";
             return {
                 title: statusName,
-                description: `Are you sure you want to update the status of ${actionUser?.email} to ${targetValue}?`,
+                description: `Are you sure you want to update the status of ${actionUser?.$user?.email} to ${targetValue}?`,
                 confirmText: "Update Status",
                 variant: targetValue === "active" ? "default" : "destructive" as const
             };
@@ -183,15 +152,15 @@ export default function MembersPageContent({ initialMembers }: MembersPageConten
                                                 <div className="flex items-center gap-3">
                                                     <Avatar className="h-8 w-8 border border-border">
                                                         <AvatarFallback className="bg-primary/5 text-primary text-[10px] font-bold">
-                                                            {(member.full_name || member.email)?.[0].toUpperCase()}
+                                                            {(member.fullName || member.$user?.email)?.[0]?.toUpperCase()}
                                                         </AvatarFallback>
                                                     </Avatar>
                                                     <div className="flex flex-col min-w-0">
                                                         <span className="text-xs font-bold text-foreground truncate">
-                                                            {member.full_name || member.email.split('@')[0]}
+                                                            {member.fullName || member.$user?.email?.split('@')[0]}
                                                         </span>
                                                         <span className="text-[10px] text-muted-foreground truncate font-medium">
-                                                            {member.email}
+                                                            {member.$user?.email}
                                                         </span>
                                                     </div>
                                                 </div>

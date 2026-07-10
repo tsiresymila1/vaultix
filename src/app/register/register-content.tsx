@@ -9,80 +9,109 @@ import {
   generateUserKeyPair,
   toBase64,
 } from "@/lib/crypto";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
+import { id } from "@instantdb/react";
+import { useAuth } from "@/context/auth-context";
 import { Key, Loader2, Shield } from "lucide-react";
+import { motion, AnimatePresence } from "@/components/motion";
+import { fade } from "@/lib/motion";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+type Step = "email" | "code" | "setup";
+
 export default function RegisterPageContent() {
+  const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const { setKeys } = useAuth();
   const router = useRouter();
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const sendCode = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-
     setLoading(true);
-
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (authError) throw authError;
-
-      if (!authData.user) throw new Error("Registration failed");
-
-      // 1. Generate salt and master key
-      const salt = await generateSalt();
-      const masterKey = await deriveMasterKey(password, salt);
-
-      // 2. Generate user key pair
-      const keyPair = await generateUserKeyPair();
-
-      // 3. Encrypt private key with master key
-      const encryptedPrivateKeyResult = await encryptPrivateKey(
-        keyPair.privateKey,
-        masterKey,
-      );
-
-      // 4. Store user public key and encrypted private key using secure RPC
-      // This bypasses strict RLS checks that might fail if the session isn't fully established yet (e.g. pending email confirmation)
-      const { error: userError } = await supabase.rpc("register_user_profile", {
-        p_id: authData.user.id,
-        p_email: authData.user.email,
-        p_public_key: keyPair.publicKey,
-        p_encrypted_private_key: encryptedPrivateKeyResult.cipher,
-        p_private_key_nonce: encryptedPrivateKeyResult.nonce,
-        p_master_key_salt: await toBase64(salt),
-      });
-
-      if (userError) throw userError;
-
-      toast.success("Identity created successfully");
-      router.push("/login");
-    } catch (error) {
-      console.error("Registration error:", error);
-      // Ensure we don't leave the user in a half-authenticated state
-      // await supabase.auth.signOut();
-      const message =
-        error instanceof Error ? error.message : "Registration failed";
-      toast.error(message);
+      await db.auth.sendMagicCode({ email });
+      setStep("code");
+      toast.success("We emailed you a verification code");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send code");
     } finally {
       setLoading(false);
     }
   };
+
+  const verifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await db.auth.signInWithMagicCode({ email, code });
+      // Already set up? Skip to app.
+      const { data } = await db.queryOnce({
+        profiles: { $: { where: { "$user.email": email } } },
+      });
+      const profiles = data.profiles;
+      if (profiles && profiles.length > 0) {
+        toast.info("Account already set up — please log in");
+        router.push("/login");
+        return;
+      }
+      setStep("setup");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Invalid code");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const setup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    setLoading(true);
+    try {
+      const authUser = await db.getAuth();
+      if (!authUser) throw new Error("Session expired — verify your email again");
+
+      // Derive master key, generate identity keypair, encrypt private key.
+      const salt = await generateSalt();
+      const masterKey = await deriveMasterKey(password, salt);
+      const keyPair = await generateUserKeyPair();
+      const encrypted = await encryptPrivateKey(keyPair.privateKey, masterKey);
+
+      const profileId = id();
+      await db.transact(
+        db.tx.profiles[profileId]
+          .update({
+            publicKey: keyPair.publicKey,
+            encryptedPrivateKey: encrypted.cipher,
+            privateKeyNonce: encrypted.nonce,
+            masterKeySalt: await toBase64(salt),
+            role: "user",
+            status: "active",
+            createdAt: Date.now(),
+          })
+          .link({ $user: authUser.id }),
+      );
+
+      setKeys(masterKey, keyPair.privateKey);
+      toast.success("Identity created successfully");
+      router.push("/vaults");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Registration failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-2 xl:min-h-screen">
       <div className="hidden lg:block relative h-full">
@@ -95,12 +124,7 @@ export default function RegisterPageContent() {
             <Shield className="w-6 h-6 text-primary" /> Vaultix
           </Link>
           <div className="w-full flex justify-center ">
-            <Image
-              src={"/preview.png"}
-              width={200}
-              height={200}
-              alt="Preview"
-            />
+            <Image src={"/preview.png"} width={200} height={200} alt="Preview" />
           </div>
           <div className="space-y-2 max-w-lg">
             <blockquote className="space-y-2">
@@ -120,37 +144,62 @@ export default function RegisterPageContent() {
               <Key className="w-5 h-5 text-primary" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Create an account
+              Create your identity
             </h1>
             <p className="text-muted-foreground text-sm">
-              Initialize your secure cryptographic identity
+              {step === "email" && "Enter your email to get started"}
+              {step === "code" && `Enter the code we sent to ${email}`}
+              {step === "setup" &&
+                "Choose a master password — it encrypts your keys and is never sent to the server"}
             </p>
           </div>
 
-          <form
-            onSubmit={handleRegister}
-            id="register-form"
-            className="space-y-4"
-          >
-            <div className="space-y-2">
-              <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                Email
-              </label>
-              <Input
-                type="email"
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4">
+          <AnimatePresence mode="wait">
+          <motion.div key={step} variants={fade} initial="hidden" animate="show" exit="exit">
+          {step === "email" && (
+            <form onSubmit={sendCode} className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Master Password
-                </label>
+                <label className="text-sm font-medium leading-none">Email</label>
+                <Input
+                  type="email"
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send code"}
+              </Button>
+            </form>
+          )}
+
+          {step === "code" && (
+            <form onSubmit={verifyCode} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">Verification code</label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
+              </Button>
+            </form>
+          )}
+
+          {step === "setup" && (
+            <form onSubmit={setup} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">Master password</label>
                 <Input
                   type="password"
                   placeholder="••••••••"
@@ -158,12 +207,11 @@ export default function RegisterPageContent() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
                   required
+                  autoFocus
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Confirm Password
-                </label>
+                <label className="text-sm font-medium leading-none">Confirm master password</label>
                 <Input
                   type="password"
                   placeholder="••••••••"
@@ -173,57 +221,27 @@ export default function RegisterPageContent() {
                   required
                 />
               </div>
-            </div>
+              <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
+                {loading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Creating identity...</span>
+                  </div>
+                ) : (
+                  "Create identity"
+                )}
+              </Button>
+            </form>
+          )}
+          </motion.div>
+          </AnimatePresence>
 
-            <div className="rounded-md bg-muted p-3 text-xs text-muted-foreground border border-border">
-              <p className="font-medium text-foreground mb-1 flex items-center gap-1">
-                <Shield className="w-3 h-3 text-primary" /> Security Note
-              </p>
-              Your master password is used to generate your encryption keys. It
-              is never sent to our servers.
-            </div>
-
-            <Button
-              type="submit"
-              form="register-form"
-              className="w-full h-9 rounded-md text-sm font-medium"
-              disabled={loading}
-            >
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Creating account...</span>
-                </div>
-              ) : (
-                "Create Account"
-              )}
-            </Button>
-          </form>
-
-          <div className="flex flex-col gap-4 text-center mt-6">
+          <div className="text-center mt-6">
             <p className="text-sm text-muted-foreground">
-              <Link
-                href="/login"
-                className="hover:text-brand underline underline-offset-4"
-              >
-                Already have an account? Sign in
+              <Link href="/login" className="hover:text-brand underline underline-offset-4">
+                Already have an account? Sign In
               </Link>
             </p>
-            <div className="flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
-              <Link
-                href="/privacy-policy"
-                className="hover:text-primary transition-colors"
-              >
-                Privacy Policy
-              </Link>
-              <span className="w-1 h-1 rounded-full bg-border" />
-              <Link
-                href="/data-deletion"
-                className="hover:text-primary transition-colors"
-              >
-                Data Deletion
-              </Link>
-            </div>
           </div>
         </div>
       </div>

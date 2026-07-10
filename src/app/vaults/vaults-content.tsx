@@ -7,102 +7,57 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/context/auth-context";
 import { encryptVaultKeyForUser, generateVaultKey } from "@/lib/crypto";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
+import { id } from "@instantdb/react";
 import { Globe, Plus, Shield, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { Vault } from "@/types";
 import { cn } from "@/lib/utils";
+import { Stagger, MotionCard, AnimatePresence } from "@/components/motion";
 
-interface VaultsPageContentProps {
-  initialVaults: Vault[];
-}
-
-export default function VaultsPageContent({
-  initialVaults,
-}: VaultsPageContentProps) {
-  const { user, setVaultKey } = useAuth();
-  const [vaults, setVaults] = useState<Vault[]>(initialVaults);
-  const [loading, setLoading] = useState(false); // No longer loading initially
+export default function VaultsPageContent() {
+  const { userData, setVaultKey } = useAuth();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [deleteVaultId, setDeleteVaultId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const router = useRouter();
 
-  const fetchVaults = useCallback(async (isRefresh = false) => {
-    try {
-      if (isRefresh) setLoading(true);
-      const { data, error } = await supabase
-        .from("vaults")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setVaults(data || []);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to fetch vaults";
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // If we have initial vaults, don't fetch on first mount unless specifically requested
-    // This avoids double-fetching on SSR.
-    // However, we still fetch if the user changes.
-    if (user) {
-      // fetchVaults(false); // Optional: keep it for freshness, but silent
-    }
-  }, [user, fetchVaults]);
+  const { data, isLoading } = db.useQuery({
+    vaults: { owner: {}, $: { order: { createdAt: "desc" } } },
+  });
+  const vaults = data?.vaults ?? [];
 
   const handleCreateVault = async (name: string) => {
     try {
+      if (!userData) throw new Error("User profile not loaded");
+
+      const vaultId = id();
       const vaultKey = await generateVaultKey();
-      const { data: vault, error: vaultError } = await supabase
-        .from("vaults")
-        .insert({ name, owner_id: user?.id })
-        .select()
-        .single();
-
-      if (vaultError) throw vaultError;
-
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("public_key")
-        .eq("id", user?.id)
-        .single();
-
-      if (userError) throw userError;
-
       const encryptedVaultKey = await encryptVaultKeyForUser(
         vaultKey,
-        userData.public_key,
+        userData.publicKey,
       );
+      const memberId = id();
+      const now = Date.now();
 
-      const { error: memberError } = await supabase
-        .from("vault_members")
-        .insert({
-          vault_id: vault.id,
-          user_id: user?.id,
-          role: "owner",
-          encrypted_vault_key: encryptedVaultKey,
-        });
-
-      if (memberError) throw memberError;
-
-      await supabase.from("environments").insert([
-        { vault_id: vault.id, name: "Development" },
-        { vault_id: vault.id, name: "Staging" },
-        { vault_id: vault.id, name: "Production" },
+      await db.transact([
+        db.tx.vaults[vaultId]
+          .update({ name, createdAt: now })
+          .link({ owner: userData.id }),
+        db.tx.vaultMembers[memberId]
+          .update({ role: "owner", encryptedVaultKey, createdAt: now })
+          .link({ vault: vaultId, member: userData.id }),
+        ...["Development", "Staging", "Production"].map((n) =>
+          db.tx.environments[id()]
+            .update({ name: n, createdAt: now })
+            .link({ vault: vaultId }),
+        ),
       ]);
 
-      setVaultKey(vault.id, vaultKey);
+      setVaultKey(vaultId, vaultKey);
 
       toast.success("Vault created successfully!");
-      fetchVaults();
     } catch (error) {
       console.error(error);
       const message =
@@ -116,14 +71,8 @@ export default function VaultsPageContent({
     if (!deleteVaultId) return;
     setDeleting(true);
     try {
-      const { error } = await supabase
-        .from("vaults")
-        .delete()
-        .eq("id", deleteVaultId);
-
-      if (error) throw error;
+      await db.transact(db.tx.vaults[deleteVaultId].delete());
       toast.success("Vault deleted successfully");
-      setVaults(vaults.filter((v) => v.id !== deleteVaultId));
       setDeleteVaultId(null);
     } catch (error) {
       const message =
@@ -155,7 +104,7 @@ export default function VaultsPageContent({
           </Button>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3].map((i) => (
               <div
@@ -165,11 +114,12 @@ export default function VaultsPageContent({
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <Stagger className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <AnimatePresence mode="popLayout">
             {vaults.map((vault) => (
+              <MotionCard key={vault.id} layout className="flex">
               <Card
-                key={vault.id}
-                className="group relative border-border bg-card hover:border-primary/50 transition-all duration-200 rounded-lg cursor-pointer flex flex-col"
+                className="group relative w-full border-border bg-card hover:border-primary/50 transition-colors duration-200 rounded-lg cursor-pointer flex flex-col"
                 onClick={() => router.push(`/vaults/${vault.id}`)}
               >
                 <CardHeader className="pb-6 flex-1">
@@ -177,7 +127,7 @@ export default function VaultsPageContent({
                     <div className="w-10 h-10 rounded-md bg-secondary flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                       <Shield className="h-5 w-5" />
                     </div>
-                    {vault.owner_id === user?.id && (
+                    {vault.owner?.id === userData?.id && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -196,7 +146,7 @@ export default function VaultsPageContent({
                       {vault.name}
                     </CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      Created {new Date(vault.created_at).toLocaleDateString()}
+                      Created {new Date(vault.createdAt).toLocaleDateString()}
                     </p>
                   </div>
                 </CardHeader>
@@ -219,16 +169,18 @@ export default function VaultsPageContent({
                   <span
                     className={cn(
                       "text-[10px] font-bold uppercase tracking-widest",
-                      vault.owner_id === user?.id
+                      vault.owner?.id === userData?.id
                         ? "text-primary"
                         : "text-muted-foreground",
                     )}
                   >
-                    {vault.owner_id === user?.id ? "Owner" : "Member"}
+                    {vault.owner?.id === userData?.id ? "Owner" : "Member"}
                   </span>
                 </div>
               </Card>
+              </MotionCard>
             ))}
+            </AnimatePresence>
             {vaults.length === 0 && (
               <div className="col-span-full py-20 text-center rounded-lg border-2 border-dashed border-border bg-secondary/10">
                 <div className="w-12 h-12 bg-secondary rounded-md flex items-center justify-center mx-auto mb-4">
@@ -249,7 +201,7 @@ export default function VaultsPageContent({
                 </Button>
               </div>
             )}
-          </div>
+          </Stagger>
         )}
       </div>
 

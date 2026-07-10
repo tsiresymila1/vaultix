@@ -16,6 +16,7 @@ import {
   toBase64,
   decryptSecret,
   decryptPrivateKey,
+  decryptVaultKey,
   initSodium,
 } from "../shared/crypto";
 import type { PasswordEntry } from "../shared/types";
@@ -27,7 +28,8 @@ const STORAGE_KEYS = {
   accessToken: "vaultix_access_token",
 };
 
-const VAULTIX_URL = "https://vaultix-secure.vercel.app";
+const VAULTIX_URL =
+  import.meta.env.VITE_VAULTIX_URL || "https://vaultix-secure.vercel.app";
 
 interface ExtensionUserData {
   id: string;
@@ -202,6 +204,19 @@ export default function App() {
       const masterKeySalt = hashParams.get("master_key_salt");
       const encryptedPrivateKey = hashParams.get("encrypted_private_key");
       const privateKeyNonce = hashParams.get("private_key_nonce");
+
+      // Decoupled auth: the web app hands us only a token (+email). Fetch the
+      // encrypted key material from /me and unlock locally with the master
+      // password. The master password never leaves the extension.
+      if (token && email && !privateKey) {
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.accessToken]: token,
+        });
+        window.location.hash = "";
+        await fetchUserData(token);
+        setLoading(false);
+        return;
+      }
 
       if (
         token &&
@@ -400,21 +415,32 @@ export default function App() {
 
   const handleCopyPassword = async (entry: PasswordEntry) => {
     try {
-      const { data } = await chrome.storage.local.get(STORAGE_KEYS.masterKey);
-      if (!data[STORAGE_KEYS.masterKey]) {
+      const store = await chrome.storage.local.get([
+        STORAGE_KEYS.masterKey,
+        STORAGE_KEYS.userData,
+      ]);
+      const keyStore = store[STORAGE_KEYS.masterKey];
+      const ud = store[STORAGE_KEYS.userData] as ExtensionUserData | undefined;
+      if (!keyStore?.privateKey || !ud?.public_key) {
         toast.error("Vault is locked");
         return;
       }
 
+      // Envelope: unseal the entry key with our keypair, then decrypt.
+      const entryKey = await decryptVaultKey(
+        entry.sealed_key,
+        ud.public_key,
+        keyStore.privateKey,
+      );
       const decrypted = await decryptSecret(
         entry.encrypted_password,
         entry.password_nonce,
-        data[STORAGE_KEYS.masterKey].key,
+        entryKey,
       );
 
       await navigator.clipboard.writeText(decrypted);
       toast.success("Password copied");
-    } catch (err) {
+    } catch {
       toast.error("Failed to copy password");
     }
   };

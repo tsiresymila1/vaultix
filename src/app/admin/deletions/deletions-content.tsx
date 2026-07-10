@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import AppShell from "@/components/layout/app-shell";
-import { supabase } from "@/lib/supabase";
-import { 
+import { db } from "@/lib/db";
+import { DeletionRequest } from "@/types";
+import {
     Search,
     MoreHorizontal,
     Mail,
@@ -34,36 +35,17 @@ import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-interface DeletionRequest {
-    id: string;
-    email: string;
-    requested_at: string;
-    processed_at: string | null;
-    status: "pending" | "processed" | "rejected";
-}
-
-interface DeletionsContentProps {
-    initialRequests: DeletionRequest[];
-}
-
-export default function DeletionsContent({ initialRequests }: DeletionsContentProps) {
-    const [requests, setRequests] = useState<DeletionRequest[]>(initialRequests);
+export default function DeletionsContent() {
+    const { data } = db.useQuery({
+        deletionRequests: { $: { order: { createdAt: "desc" } } },
+    });
+    const requests = (data?.deletionRequests as DeletionRequest[]) ?? [];
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
 
-    const handleUpdateStatus = async (id: string, status: "pending" | "processed" | "rejected") => {
+    const handleUpdateStatus = async (reqId: string, status: "pending" | "processed" | "rejected") => {
         try {
-            const { error } = await supabase
-                .from('deletion_requests')
-                .update({ 
-                    status, 
-                    processed_at: status === 'processed' ? new Date().toISOString() : null 
-                })
-                .eq('id', id);
-
-            if (error) throw error;
-            
-            setRequests(prev => prev.map(r => r.id === id ? { ...r, status, processed_at: status === 'processed' ? new Date().toISOString() : null } : r));
+            await db.transact(db.tx.deletionRequests[reqId].update({ status }));
             toast.success(`Request marked as ${status}`);
         } catch (err) {
             console.error(err);
@@ -187,7 +169,7 @@ export default function DeletionsContent({ initialRequests }: DeletionsContentPr
                                             {request.email}
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">
-                                            {new Date(request.requested_at).toLocaleDateString()} at {new Date(request.requested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            {new Date(request.createdAt).toLocaleDateString()} at {new Date(request.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </TableCell>
                                         <TableCell>
                                             <Badge 

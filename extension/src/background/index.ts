@@ -1,9 +1,16 @@
 // Background Service Worker for Vaultix Chrome Extension
 
+import { decryptSecret, decryptVaultKey } from "../shared/crypto";
+import type { PasswordEntry, UserData } from "../shared/types";
+
+const VAULTIX_URL =
+  import.meta.env.VITE_VAULTIX_URL || "https://vaultix-secure.vercel.app";
+
 const STORAGE_KEYS = {
   masterKey: 'vaultix_master_key',
   userData: 'vaultix_user_data',
-  isUnlocked: 'vaultix_is_unlocked'
+  isUnlocked: 'vaultix_is_unlocked',
+  accessToken: 'vaultix_access_token',
 };
 
 interface Message {
@@ -27,8 +34,11 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
       return await getMasterKey();
       
     case 'GET_PASSWORDS':
-      return await getPasswords();
-      
+      return await getPasswords(message.payload as { url?: string } | undefined);
+
+    case 'GET_DECRYPTED_PASSWORD':
+      return await getDecryptedPassword(message.payload as { entryId: string });
+
     case 'DETECT_LOGIN':
       return await detectLoginForm(message.tabId!);
       
@@ -99,10 +109,54 @@ async function getMasterKey() {
   return result[STORAGE_KEYS.masterKey] || null;
 }
 
-async function getPasswords() {
-  // This would normally query Supabase, but for now we'll return empty
-  // In production, implement proper sync logic
-  return { passwords: [] };
+async function fetchPasswords(): Promise<PasswordEntry[]> {
+  const { [STORAGE_KEYS.accessToken]: token } = await chrome.storage.local.get(
+    STORAGE_KEYS.accessToken,
+  );
+  if (!token) return [];
+  const res = await fetch(`${VAULTIX_URL}/api/extension/passwords`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.passwords ?? []) as PasswordEntry[];
+}
+
+function hostMatches(entryUrl: string | null, host?: string): boolean {
+  if (!host) return true;
+  if (!entryUrl) return false;
+  const u = entryUrl.toLowerCase().replace(/^https?:\/\//, "");
+  return host.toLowerCase().includes(u) || u.includes(host.toLowerCase());
+}
+
+async function getPasswords(payload?: { url?: string }) {
+  const all = await fetchPasswords();
+  const passwords = all.filter((p) => hostMatches(p.website_url, payload?.url));
+  return { passwords };
+}
+
+// Unseal the entry key with our keypair, then decrypt the password (envelope).
+async function getDecryptedPassword(payload: { entryId: string }) {
+  try {
+    const store = await chrome.storage.local.get([
+      STORAGE_KEYS.masterKey,
+      STORAGE_KEYS.userData,
+    ]);
+    const keyStore = store[STORAGE_KEYS.masterKey] as { privateKey?: string } | undefined;
+    const ud = store[STORAGE_KEYS.userData] as UserData | undefined;
+    if (!keyStore?.privateKey || !ud?.public_key) {
+      return { error: "locked" };
+    }
+    const all = await fetchPasswords();
+    const entry = all.find((p) => p.id === payload.entryId);
+    if (!entry) return { error: "not found" };
+
+    const entryKey = await decryptVaultKey(entry.sealed_key, ud.public_key, keyStore.privateKey);
+    const password = await decryptSecret(entry.encrypted_password, entry.password_nonce, entryKey);
+    return { password };
+  } catch {
+    return { error: "decrypt failed" };
+  }
 }
 
 async function detectLoginForm(tabId: number) {

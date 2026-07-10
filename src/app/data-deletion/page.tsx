@@ -7,9 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
+import { id } from "@instantdb/react";
+import { useAuth } from "@/context/auth-context";
 
 export default function DataDeletionPage() {
+    const { user, userData } = useAuth();
     const [email, setEmail] = useState("");
     const [confirmText, setConfirmText] = useState("");
     const [loading, setLoading] = useState(false);
@@ -27,13 +30,16 @@ export default function DataDeletionPage() {
         // In a real app, this would trigger an administrative deletion request or an automated cleanup.
         // For this implementation, we log the request.
         try {
-            const { error } = await supabase.from('deletion_requests').insert({
-                email,
-                requested_at: new Date().toISOString()
-            });
-            
-            if (error) throw error;
-            
+            await db.transact(
+                db.tx.deletionRequests[id()]
+                    .update({
+                        email,
+                        status: "pending",
+                        createdAt: Date.now(),
+                    })
+                    .link(user && userData ? { requester: userData.id } : {}),
+            );
+
             setSubmitted(true);
             toast.success("Deletion request received.");
         } catch (err) {

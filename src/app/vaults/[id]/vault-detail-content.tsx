@@ -18,7 +18,8 @@ import {
     decryptVaultKeyWithPrivateKey,
     encryptSecret
 } from "@/lib/crypto";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
+import { id as newId } from "@instantdb/react";
 import { cn } from "@/lib/utils";
 import {
     Activity,
@@ -38,34 +39,51 @@ import {
     Users
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { Environment, MemberData, Secret, Vault } from "@/types";
+import { Secret } from "@/types";
 
 interface VaultDetailContentProps {
     params: { id: string };
-    initialVault: Vault;
-    initialEnvironments: Environment[];
-    initialSecrets: Secret[];
-    initialMemberData: MemberData | null;
 }
 
 export default function VaultDetailContent({
     params,
-    initialVault,
-    initialEnvironments,
-    initialSecrets,
-    initialMemberData
 }: VaultDetailContentProps) {
     const { id } = params;
-    const { user, privateKey, vaultKeys, setVaultKey } = useAuth();
-    const [environments, setEnvironments] = useState<Environment[]>(initialEnvironments);
-    const [secrets, setSecrets] = useState<Secret[]>(initialSecrets);
-    const [vaultName, setVaultName] = useState(initialVault.name);
+    const { user, userData, privateKey, vaultKeys, setVaultKey } = useAuth();
+
+    const { data } = db.useQuery({
+        vaults: {
+            $: { where: { id } },
+            environments: {},
+            secrets: { environment: {} },
+            members: { member: {} },
+        },
+    });
+
+    const vault = data?.vaults?.[0];
+    const vaultName = vault?.name ?? "";
+
+    const environments = useMemo(
+        () => [...(vault?.environments ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+        [vault],
+    );
+    const secrets = useMemo(
+        () => [...(vault?.secrets ?? [])].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+        [vault],
+    );
+
+    const memberData = useMemo(() => {
+        if (!userData) return null;
+        return vault?.members?.find((m) => m.member?.id === userData.id) ?? null;
+    }, [vault, userData]);
+    const userRole = memberData?.role ?? null;
+
     const vaultKey = vaultKeys[id] || null;
     const [loading, setLoading] = useState(false);
-    const [activeEnv, setActiveEnv] = useState<string | null>(initialEnvironments[0]?.id || null);
+    const [activeEnv, setActiveEnv] = useState<string | null>(null);
     const [showValues, setShowValues] = useState<Record<string, boolean>>({});
     const [decryptedSecrets, setDecryptedSecrets] = useState<Record<string, string>>({});
     const [addSecretOpen, setAddSecretOpen] = useState(false);
@@ -78,7 +96,6 @@ export default function VaultDetailContent({
     const [deletingVault, setDeletingVault] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
-    const [userRole, setUserRole] = useState<string | null>(null);
     const [shareDialogOpen, setShareDialogOpen] = useState(false);
     const [secretsToShare, setSecretsToShare] = useState<Secret[] | null>(null);
     const [selectedSecrets, setSelectedSecrets] = useState<Set<string>>(new Set());
@@ -86,43 +103,33 @@ export default function VaultDetailContent({
     const [editValue, setEditValue] = useState("");
     const [editKey, setEditKey] = useState("");
     const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+    const [derivingKey, setDerivingKey] = useState(false);
 
     const router = useRouter();
 
-    const fetchVaultData = useCallback(async () => {
-        try {
-            setLoading(true);
-            const { data: vaultInfo } = await supabase.from("vaults").select("name").eq("id", id).single();
-            if (vaultInfo) setVaultName(vaultInfo.name);
+    // Data is kept live by db.useQuery; retained for the manual refresh button UX.
+    const fetchVaultData = () => {
+        // No-op: live queries auto-update.
+    };
 
-            const { data: envs } = await supabase.from("environments").select("*").eq("vault_id", id).order("name", { ascending: true });
-            setEnvironments(envs || []);
-
-            const { data: secData } = await supabase.from("secrets").select("*").eq("vault_id", id).order("created_at", { ascending: false });
-            setSecrets(secData || []);
-        } catch (error) {
-            console.error("Failed to refresh vault data", error);
-            toast.error("Failed to refresh vault data");
-        } finally {
-            setLoading(false);
+    // Select the first environment once data loads.
+    useEffect(() => {
+        if (!activeEnv && environments.length > 0) {
+            setActiveEnv(environments[0].id);
         }
-    }, [id]);
-
-    const [derivingKey, setDerivingKey] = useState(false);
+    }, [environments, activeEnv]);
 
     useEffect(() => {
-        if (!user || !privateKey || !initialMemberData || vaultKey) return;
-
-        if (initialMemberData) setUserRole(initialMemberData.role);
+        if (!user || !privateKey || !memberData || vaultKey) return;
 
         const decryptVK = async () => {
             try {
                 setDerivingKey(true);
-                const userPublicKey = initialMemberData.users?.public_key;
+                const userPublicKey = memberData.member?.publicKey;
                 if (!userPublicKey) throw new Error("User public key not found");
 
                 const decryptedVK = await decryptVaultKeyWithPrivateKey(
-                    initialMemberData.encrypted_vault_key,
+                    memberData.encryptedVaultKey,
                     userPublicKey,
                     privateKey
                 );
@@ -136,7 +143,7 @@ export default function VaultDetailContent({
         };
 
         decryptVK();
-    }, [user, privateKey, initialMemberData, vaultKey, id, setVaultKey]);
+    }, [user, privateKey, memberData, vaultKey, id, setVaultKey]);
 
     const handleAddSecret = async (key: string, value: string) => {
         if (!activeEnv) return;
@@ -149,21 +156,12 @@ export default function VaultDetailContent({
 
             const { cipher, nonce } = await encryptSecret(value, vaultKey);
 
-            const { data, error } = await supabase
-                .from("secrets")
-                .insert({
-                    vault_id: id,
-                    environment_id: activeEnv,
-                    key,
-                    encrypted_payload: cipher,
-                    nonce,
-                })
-                .select()
-                .single();
+            await db.transact(
+                db.tx.secrets[newId()]
+                    .update({ key, encryptedPayload: cipher, nonce, createdAt: Date.now() })
+                    .link({ vault: id, environment: activeEnv })
+            );
 
-            if (error) throw error;
-
-            setSecrets([data, ...secrets]);
             toast.success("Secret added successfully");
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to add secret";
@@ -181,32 +179,23 @@ export default function VaultDetailContent({
                 throw new Error("Vault session is locked. Please unlock it first.");
             }
 
-            // Insert sequentially to keep it simple and avoid rate limits.
-            const inserted: Secret[] = [];
+            const ops = [];
             for (const entry of entries) {
                 const key = entry.key.trim();
                 const value = entry.value;
                 if (!key) continue;
 
                 const { cipher, nonce } = await encryptSecret(value, vaultKey);
-                const { data, error } = await supabase
-                    .from("secrets")
-                    .insert({
-                        vault_id: id,
-                        environment_id: activeEnv,
-                        key,
-                        encrypted_payload: cipher,
-                        nonce,
-                    })
-                    .select()
-                    .single();
-                if (error) throw error;
-                inserted.push(data);
+                ops.push(
+                    db.tx.secrets[newId()]
+                        .update({ key, encryptedPayload: cipher, nonce, createdAt: Date.now() })
+                        .link({ vault: id, environment: activeEnv })
+                );
             }
 
-            if (inserted.length > 0) {
-                setSecrets([...inserted.reverse(), ...secrets]);
-                toast.success(`Imported ${inserted.length} secret(s)`);
+            if (ops.length > 0) {
+                await db.transact(ops);
+                toast.success(`Imported ${ops.length} secret(s)`);
             } else {
                 toast.message("No secrets imported");
             }
@@ -222,14 +211,8 @@ export default function VaultDetailContent({
 
         setDeletingSecret(true);
         try {
-            const { error } = await supabase
-                .from("secrets")
-                .delete()
-                .eq("id", deleteSecretId);
+            await db.transact(db.tx.secrets[deleteSecretId].delete());
 
-            if (error) throw error;
-
-            setSecrets(secrets.filter(s => s.id !== deleteSecretId));
             toast.success("Secret deleted");
             setDeleteSecretId(null);
         } catch (error) {
@@ -248,7 +231,7 @@ export default function VaultDetailContent({
 
         try {
             if (!vaultKey) throw new Error("Vault key not loaded");
-            const decrypted = await decryptSecret(secret.encrypted_payload, secret.nonce, vaultKey);
+            const decrypted = await decryptSecret(secret.encryptedPayload, secret.nonce, vaultKey);
             setDecryptedSecrets({ ...decryptedSecrets, [secret.id]: decrypted });
             setShowValues({ ...showValues, [secret.id]: true });
         } catch (error) {
@@ -259,12 +242,7 @@ export default function VaultDetailContent({
 
     const handleUpdateVaultName = async (newName: string) => {
         try {
-            const { error } = await supabase
-                .from("vaults")
-                .update({ name: newName })
-                .eq("id", id);
-            if (error) throw error;
-            setVaultName(newName);
+            await db.transact(db.tx.vaults[id].update({ name: newName }));
             toast.success("Vault name updated");
         } catch (error) {
             toast.error("Failed to update vault name");
@@ -275,11 +253,7 @@ export default function VaultDetailContent({
     const handleDeleteVault = async () => {
         setDeletingVault(true);
         try {
-            const { error } = await supabase
-                .from("vaults")
-                .delete()
-                .eq("id", id);
-            if (error) throw error;
+            await db.transact(db.tx.vaults[id].delete());
             toast.success("Vault deleted");
             router.push("/vaults");
         } catch {
@@ -316,14 +290,8 @@ export default function VaultDetailContent({
         setLoading(true);
         try {
             const idsToDelete = Array.from(selectedSecrets);
-            const { error } = await supabase
-                .from("secrets")
-                .delete()
-                .in("id", idsToDelete);
+            await db.transact(idsToDelete.map((sid) => db.tx.secrets[sid].delete()));
 
-            if (error) throw error;
-
-            setSecrets(secrets.filter(s => !selectedSecrets.has(s.id)));
             setSelectedSecrets(new Set());
             toast.success(`Deleted ${idsToDelete.length} secret(s)`);
             setBulkDeleteConfirmOpen(false);
@@ -339,18 +307,10 @@ export default function VaultDetailContent({
         try {
             setLoading(true);
             const { cipher, nonce } = await encryptSecret(editValue, vaultKey);
-            const { error } = await supabase
-                .from("secrets")
-                .update({
-                    key: editKey,
-                    encrypted_payload: cipher,
-                    nonce
-                })
-                .eq("id", secretId);
+            await db.transact(
+                db.tx.secrets[secretId].update({ key: editKey, encryptedPayload: cipher, nonce })
+            );
 
-            if (error) throw error;
-
-            setSecrets(secrets.map(s => s.id === secretId ? { ...s, key: editKey, encrypted_payload: cipher, nonce } : s));
             setDecryptedSecrets({ ...decryptedSecrets, [secretId]: editValue });
             setEditingSecretId(null);
             toast.success("Secret updated");
@@ -362,7 +322,7 @@ export default function VaultDetailContent({
     };
 
     const filteredSecrets = secrets.filter(s =>
-        s.environment_id === activeEnv &&
+        s.environment?.id === activeEnv &&
         s.key.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
@@ -409,7 +369,7 @@ export default function VaultDetailContent({
                                 <span>Members</span>
                             </Button>
 
-                            {(initialMemberData?.role === 'owner' || initialMemberData?.role === 'moderator') && (
+                            {(userRole === 'owner' || userRole === 'moderator') && (
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -590,9 +550,13 @@ export default function VaultDetailContent({
                                                 </TableCell>
                                             </TableRow>
                                         ) : (
-                                            filteredSecrets.map((secret) => (
-                                                <TableRow key={secret.id} className={cn(
+                                            filteredSecrets.map((secret, i) => (
+                                                <TableRow
+                                                  key={secret.id}
+                                                  style={{ animationDelay: `${Math.min(i, 12) * 30}ms`, animationFillMode: "both" }}
+                                                  className={cn(
                                                     "group border-border hover:bg-secondary/20 transition-colors",
+                                                    "animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none",
                                                     selectedSecrets.has(secret.id) && "bg-secondary/40 hover:bg-secondary/40"
                                                 )}>
                                                     <TableCell className="py-4 pl-6">

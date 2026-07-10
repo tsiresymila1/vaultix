@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { encryptSecret, generateVaultKey } from "@/lib/crypto";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
+import { id } from "@instantdb/react";
 import { Check, Copy, Link as LinkIcon, Loader2, Share2, Shield } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -36,23 +37,21 @@ export default function CreateSharePage() {
             // 2. Encrypt secret
             const { cipher, nonce } = await encryptSecret(secretValue, ephemeralKeyBase64);
 
-            // 3. Calculate expiration
-            const expirationDate = new Date();
-            expirationDate.setSeconds(expirationDate.getSeconds() + parseInt(duration));
+            // 3. Calculate expiration (unix ms)
+            const expiresAt = Date.now() + parseInt(duration) * 1000;
 
-            // 4. Store in Supabase
-            const { data, error } = await supabase
-                .from("shared_secrets")
-                .insert({
-                    encrypted_payload: cipher,
+            // 4. Store in InstantDB
+            const secretId = id();
+            await db.transact(
+                db.tx.sharedSecrets[secretId].update({
+                    encryptedPayload: cipher,
                     nonce: nonce,
-                    expires_at: expirationDate.toISOString(),
-                    views_remaining: views === "unlimited" ? null : parseInt(views),
-                })
-                .select("id")
-                .single();
-
-            if (error) throw error;
+                    expiresAt,
+                    // "unlimited" is modelled as a very large remaining-view count.
+                    viewsRemaining: views === "unlimited" ? Number.MAX_SAFE_INTEGER : parseInt(views),
+                    createdAt: Date.now(),
+                }),
+            );
 
             // 5. Generate URL
             let hash = ephemeralKeyBase64;
@@ -70,7 +69,7 @@ export default function CreateSharePage() {
                 hash = `pwd:${await toBase64(salt)}:${nonce}:${cipher}`;
             }
 
-            const url = `${window.location.origin}/share/${data.id}#${hash}`;
+            const url = `${window.location.origin}/share/${secretId}#${hash}`;
             setGeneratedUrl(url);
             toast.success("Secret link created!");
 

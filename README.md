@@ -110,24 +110,44 @@ This ensures that only authenticated members with the correct master password ca
    cd vaultix
    ```
 
-2. **Install dependencies**
+2. **Install dependencies** (this repo uses **pnpm**)
 
    ```bash
-   npm install
+   pnpm install
    ```
 
-3. **Environment Setup**
-   Create a `.env.local` file with your Supabase credentials:
+3. **Create an InstantDB app**
+   Sign up at [instantdb.com](https://instantdb.com), then:
 
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-   ```
-
-4. **Run Development Server**
    ```bash
-   npm run dev
+   npx instant-cli@latest login
+   npx instant-cli@latest init      # links this repo to an app; writes the App ID
+   npx instant-cli@latest push schema   # pushes instant.schema.ts
+   npx instant-cli@latest push perms    # pushes instant.perms.ts
    ```
+
+4. **Environment Setup**
+   Copy `.env.exemple` to `.env` and fill it in (App ID + Admin token from the
+   InstantDB dashboard, plus generated secrets):
+
+   ```
+   NEXT_PUBLIC_INSTANT_APP_ID=your-instant-app-id
+   INSTANT_ADMIN_TOKEN=your-instant-admin-token
+   CLI_JWT_SECRET=$(openssl rand -hex 32)
+   CRON_SECRET=$(openssl rand -hex 16)
+   ```
+
+5. **Run Development Server**
+   ```bash
+   pnpm dev
+   ```
+
+### Authentication model
+
+Login uses a **passwordless email magic code** (via InstantDB) for the session,
+plus a separate **master password** that derives your encryption keys locally.
+The master password is never sent to the server; on first sign-in you set it,
+and on later logins you enter it to unlock your vault.
 
 ## 📄 License
 

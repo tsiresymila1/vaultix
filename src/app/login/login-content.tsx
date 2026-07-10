@@ -5,118 +5,99 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
 import { deriveMasterKey, decryptPrivateKey, fromBase64 } from "@/lib/crypto";
 import { useAuth } from "@/context/auth-context";
 import Link from "next/link";
 import { Shield, Loader2 } from "lucide-react";
 import Image from "next/image";
+import { motion, AnimatePresence } from "@/components/motion";
+import { fade } from "@/lib/motion";
+
+type Step = "email" | "code" | "unlock";
 
 export default function LoginPageContent() {
+  const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const { setKeys } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const returnTo = searchParams.get("returnTo");
+  // CLI/extension callbacks only need an authenticated session (the master
+  // password never leaves those clients), so we skip the web unlock step.
+  const isTokenCallback = !!returnTo && returnTo.includes("callback=");
+
+  const sendCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
-      const { data: authData, error: authError } =
-        await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+      await db.auth.sendMagicCode({ email });
+      setStep("code");
+      toast.success("We emailed you a login code");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send code");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      if (authError) throw authError;
-      console.info("Getting user profile ....");
-      // Fetch user profile using secure RPC to bypass potential RLS issues
-      const { data: userRows, error: userError } = await supabase.rpc(
-        "get_my_profile",
-        {
-          p_uid: authData.user.id,
-        },
-      );
+  const verifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await db.auth.signInWithMagicCode({ email, code });
 
-      console.info("User profile fetched successfully");
-      if (userError) throw userError;
-
-      if (!userRows || userRows.length === 0) {
-        console.error("Profile missing for ID:", authData.user.id);
-        // This means the auth user exists but the public profile (keys) is missing
-        await supabase.auth.signOut();
-        throw new Error(
-          `Account setup incomplete (Profile missing for ${authData.user.id}). Please register again.`,
-        );
+      if (isTokenCallback && returnTo) {
+        router.push(returnTo);
+        return;
       }
 
-      const userData = userRows[0];
+      // Confirm a profile exists; otherwise send the user to onboarding.
+      const { data } = await db.queryOnce({
+        profiles: { $: { where: { "$user.email": email } } },
+      });
+      const profiles = data.profiles;
+      if (!profiles || profiles.length === 0) {
+        toast.info("Finish setting up your identity");
+        router.push("/register");
+        return;
+      }
+      setStep("unlock");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Invalid code");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      const salt = await fromBase64(userData.master_key_salt);
+  const unlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const { data } = await db.queryOnce({
+        profiles: { $: { where: { "$user.email": email } } },
+      });
+      const profiles = data.profiles;
+      const profile = profiles?.[0];
+      if (!profile) throw new Error("Profile not found. Please register again.");
+
+      const salt = await fromBase64(profile.masterKeySalt);
       const masterKey = await deriveMasterKey(password, salt);
       const privateKey = await decryptPrivateKey(
-        userData.encrypted_private_key,
-        userData.private_key_nonce,
+        profile.encryptedPrivateKey,
+        profile.privateKeyNonce,
         masterKey,
       );
 
       setKeys(masterKey, privateKey);
       toast.success("Welcome back to Vaultix");
-
-      // Explicitly get fresh session to ensure refresh_token is available
-      const {
-        data: { session: freshSession },
-      } = await supabase.auth.getSession();
-      const currentSession = freshSession || authData.session;
-
-      const returnTo = searchParams.get("returnTo");
-      if (returnTo) {
-        // If it's a CLI login callback, we need to append the session data
-        if (returnTo.includes("callback=")) {
-          // It's highly likely an API route or another handler
-          // We append tokens to the returnTo URL so the destination can pick them up
-          const returnUrl = new URL(returnTo, window.location.href);
-          // Supabase session tokens - be extremely explicit to avoid passing "null" as a string
-          const accessToken = currentSession?.access_token || "";
-          const refreshToken = currentSession?.refresh_token || "";
-          const userEmail = authData.user?.email || "";
-
-          if (accessToken) {
-            returnUrl.searchParams.set("access_token", accessToken);
-          }
-          if (refreshToken && refreshToken !== "null") {
-            returnUrl.searchParams.set("refresh_token", refreshToken);
-          }
-          if (userEmail) {
-            returnUrl.searchParams.set("email", userEmail);
-          }
-
-          // For the specific /api/auth/cli case, it expects 'callback' param to be preserved
-          // which is already in 'returnTo'. The API route logic will grab session from cookie
-          // or we can pass it explicitly if we want to be doubly sure, but
-          // since we just signed in, the cookie is set.
-
-          // HOWEVER, if the downstream is a non-cookie based CLI callback directly (unlikely given previous step),
-          // we might need to be careful.
-
-          // The previous step established /api/auth/cli?callback=...
-          // So we are redirecting to that.
-
-          router.push(returnUrl.toString());
-        } else {
-          router.push(returnTo);
-        }
-      } else {
-        router.push("/vaults");
-      }
-    } catch (error) {
-      console.error(error);
-      const message =
-        error instanceof Error ? error.message : "Invalid credentials";
-      toast.error(message);
+      router.push(returnTo && !isTokenCallback ? returnTo : "/vaults");
+    } catch {
+      toast.error("Incorrect master password");
     } finally {
       setLoading(false);
     }
@@ -134,12 +115,7 @@ export default function LoginPageContent() {
             <Shield className="w-6 h-6 text-primary" /> Vaultix
           </Link>
           <div className="w-full flex justify-center ">
-            <Image
-              src={"/preview.png"}
-              width={200}
-              height={200}
-              alt="Preview"
-            />
+            <Image src={"/preview.png"} width={200} height={200} alt="Preview" />
           </div>
           <div className="space-y-2 max-w-lg">
             <blockquote className="space-y-2">
@@ -162,78 +138,95 @@ export default function LoginPageContent() {
               Welcome back
             </h1>
             <p className="text-muted-foreground text-sm">
-              Enter your email to sign in to your account
+              {step === "email" && "Enter your email to receive a login code"}
+              {step === "code" && `Enter the code we sent to ${email}`}
+              {step === "unlock" && "Enter your master password to unlock"}
             </p>
           </div>
 
-          <form onSubmit={handleLogin} id="login-form" className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                Email
-              </label>
-              <Input
-                type="email"
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Password
-                </label>
+          <AnimatePresence mode="wait">
+          <motion.div key={step} variants={fade} initial="hidden" animate="show" exit="exit">
+          {step === "email" && (
+            <form onSubmit={sendCode} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">Email</label>
+                <Input
+                  type="email"
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
+                  required
+                />
               </div>
-              <Input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
-                required
-              />
-            </div>
+              <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send code"}
+              </Button>
+            </form>
+          )}
 
-            <Button
-              type="submit"
-              form="login-form"
-              className="w-full h-9 rounded-md text-sm font-medium"
-              disabled={loading}
-            >
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Signing in...</span>
-                </div>
-              ) : (
-                "Sign In"
-              )}
-            </Button>
-          </form>
+          {step === "code" && (
+            <form onSubmit={verifyCode} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">Login code</label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
+              </Button>
+            </form>
+          )}
+
+          {step === "unlock" && (
+            <form onSubmit={unlock} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">Master password</label>
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
+                  required
+                  autoFocus
+                />
+              </div>
+              <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
+                {loading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Unlocking...</span>
+                  </div>
+                ) : (
+                  "Unlock"
+                )}
+              </Button>
+            </form>
+          )}
+          </motion.div>
+          </AnimatePresence>
 
           <div className="flex flex-col gap-4 text-center mt-6">
             <p className="text-sm text-muted-foreground">
-              <Link
-                href="/register"
-                className="hover:text-brand underline underline-offset-4"
-              >
+              <Link href="/register" className="hover:text-brand underline underline-offset-4">
                 Don&apos;t have an account? Sign Up
               </Link>
             </p>
             <div className="flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
-              <Link
-                href="/privacy-policy"
-                className="hover:text-primary transition-colors"
-              >
+              <Link href="/privacy-policy" className="hover:text-primary transition-colors">
                 Privacy Policy
               </Link>
               <span className="w-1 h-1 rounded-full bg-border" />
-              <Link
-                href="/data-deletion"
-                className="hover:text-primary transition-colors"
-              >
+              <Link href="/data-deletion" className="hover:text-primary transition-colors">
                 Data Deletion
               </Link>
             </div>

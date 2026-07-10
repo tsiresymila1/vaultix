@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/auth-context";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
 import { ArrowRight, Bell, Database, Lock, Moon, Settings, Shield, Sun, Terminal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -14,22 +14,19 @@ import { toast } from "sonner";
 import { UserSettings } from "@/types";
 import Link from "next/link";
 
-interface SettingsPageContentProps {
-    initialSettings: UserSettings | null;
-}
-
-export default function SettingsPageContent({ initialSettings }: SettingsPageContentProps) {
-    const { user, refreshProfile } = useAuth();
+export default function SettingsPageContent() {
+    const { user, userData, signOut } = useAuth();
     const router = useRouter();
-    const [darkMode, setDarkMode] = useState(initialSettings?.theme !== 'light' && initialSettings?.theme !== undefined);
-    const [autoLock, setAutoLock] = useState(initialSettings?.auto_lock ?? true);
-    const [notifications, setNotifications] = useState(initialSettings?.email_notifications ?? true);
+    const [darkMode, setDarkMode] = useState(true);
+    const [autoLock, setAutoLock] = useState(true);
+    const [lockTimeout, setLockTimeout] = useState(15);
+    const [notifications, setNotifications] = useState(true);
 
     const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
 
 
     const updateSettings = async (key: string, value: string | number | boolean | undefined | null) => {
-        if (!user) return;
+        if (!user || !userData) return;
 
         // Optimistic Update
         if (key === 'theme') {
@@ -40,22 +37,19 @@ export default function SettingsPageContent({ initialSettings }: SettingsPageCon
             root.classList.add(value as string);
         }
         if (key === 'auto_lock') setAutoLock(value as boolean);
+        if (key === 'lock_timeout') setLockTimeout(value as number);
         if (key === 'email_notifications') setNotifications(value as boolean);
 
         const newSettings = {
             theme: key === 'theme' ? value : (darkMode ? 'dark' : 'light'),
             auto_lock: key === 'auto_lock' ? value : autoLock,
+            lock_timeout: key === 'lock_timeout' ? value : lockTimeout,
             email_notifications: key === 'email_notifications' ? value : notifications
         };
 
         try {
-            const { error } = await supabase
-                .from("users")
-                .update({ settings: newSettings })
-                .eq("id", user.id);
-
-            if (error) throw error;
-            await refreshProfile();
+            // Live query auto-refreshes the profile after this write.
+            await db.transact(db.tx.profiles[userData.id].update({ settings: newSettings }));
         } catch (error) {
             console.error("Error updating settings:", error);
             toast.error("Failed to save settings");
@@ -67,7 +61,7 @@ export default function SettingsPageContent({ initialSettings }: SettingsPageCon
         try {
             localStorage.clear();
             sessionStorage.clear();
-            await supabase.auth.signOut();
+            await signOut();
             toast.success("Local cache purged. Redirecting...");
             router.push("/login");
         } catch (error) {
@@ -75,27 +69,20 @@ export default function SettingsPageContent({ initialSettings }: SettingsPageCon
         }
     };
 
+    // Sync local toggle state when the live-query profile arrives/changes.
     useEffect(() => {
-
-        if (!initialSettings && user) {
-            const loadSettings = async () => {
-                if (!user) return;
-                const { data } = await supabase
-                    .from("users")
-                    .select("settings")
-                    .eq("id", user.id)
-                    .single();
-
-                if (data?.settings) {
-                    const settings = data.settings as UserSettings;
-                    setDarkMode(settings.theme !== 'light');
-                    setAutoLock(settings.auto_lock ?? true);
-                    setNotifications(settings.email_notifications ?? true);
-                }
-            };
-            loadSettings();
+        const settings = userData?.settings as UserSettings | undefined;
+        if (settings) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setDarkMode(settings.theme !== 'light');
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setAutoLock(settings.auto_lock ?? true);
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setLockTimeout(settings.lock_timeout ?? 15);
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setNotifications(settings.email_notifications ?? true);
         }
-    }, [user, initialSettings]);
+    }, [userData]);
 
     return (
         <div className="space-y-8 max-w-5xl">
@@ -170,13 +157,26 @@ export default function SettingsPageContent({ initialSettings }: SettingsPageCon
                                 </div>
                                 <div>
                                     <p className="text-sm font-bold">Auto-Lock Session</p>
-                                    <p className="text-[11px] text-muted-foreground">Automatically lock secrets after 15 minutes of inactivity</p>
+                                    <p className="text-[11px] text-muted-foreground">Automatically lock secrets after {lockTimeout} minutes of inactivity</p>
                                 </div>
                             </div>
-                            <Switch
-                                checked={autoLock}
-                                onCheckedChange={(checked) => updateSettings('auto_lock', checked)}
-                            />
+                            <div className="flex items-center gap-3">
+                                {autoLock && (
+                                    <select
+                                        value={lockTimeout}
+                                        onChange={(e) => updateSettings('lock_timeout', Number(e.target.value))}
+                                        className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+                                    >
+                                        {[1, 5, 15, 30, 60].map((m) => (
+                                            <option key={m} value={m}>{m} min</option>
+                                        ))}
+                                    </select>
+                                )}
+                                <Switch
+                                    checked={autoLock}
+                                    onCheckedChange={(checked) => updateSettings('auto_lock', checked)}
+                                />
+                            </div>
                         </div>
 
                         <div className="p-4 rounded-md bg-destructive/[0.02] border border-destructive/20 flex items-center justify-between group">
@@ -210,11 +210,11 @@ export default function SettingsPageContent({ initialSettings }: SettingsPageCon
                         <div>
                             <p className="font-bold text-sm">Infrastructure</p>
                             <p className="text-xs text-muted-foreground leading-relaxed mt-1">
-                                Connected to Supabase Cloud. End-to-end encryption active via Libsodium WASM.
+                                Connected to InstantDB. End-to-end encryption active via Libsodium WASM.
                             </p>
                         </div>
                         <Button asChild variant="link" className="p-0 h-auto self-start mt-4 gap-1 text-primary hover:no-underline text-xs font-bold uppercase tracking-widest group/btn">
-                            <a href="https://status.supabase.com/" target="_blank" rel="noopener noreferrer">
+                            <a href="https://www.instantdb.com/" target="_blank" rel="noopener noreferrer">
                                 System Status <ArrowRight className="h-3 w-3 group-hover/btn:translate-x-1 transition-transform" />
                             </a>
                         </Button>

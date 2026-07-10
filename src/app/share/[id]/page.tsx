@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { OTPAuthenticator } from "@/components/shared/otp-authenticator";
 import { decryptSecret } from "@/lib/crypto";
-import { supabase } from "@/lib/supabase";
+import { api } from "@/lib/http/client";
 import { cn } from "@/lib/utils";
 import { AlertCircle, Check, Copy, Eye, EyeOff, Loader2, Lock, ShieldCheck, Timer } from "lucide-react";
 import { FormEvent, MouseEvent, useEffect, useState } from "react";
@@ -77,43 +77,26 @@ export default function SharedSecretPage({ params }: SharedSecretPageProps) {
 
         const fetchSecret = async () => {
             try {
-                // 1. Fetch encrypted payload
-                const { data, error } = await supabase
-                    .from("shared_secrets")
-                    .select("encrypted_payload, nonce, expires_at, views_remaining")
-                    .eq("id", id)
-                    .single();
+                // 1. Fetch + decrement server-side (reads, decrements views, deletes on 0).
+                const res = await api.shared.read.$post({ json: { id } });
+                const data = await res.json();
 
-                if (error || !data) {
-                    throw new Error("Secret not found or expired.");
+                if (!res.ok || "error" in data) {
+                    const msg =
+                        "error" in data && typeof data.error === "string"
+                            ? data.error
+                            : "Secret not found or expired.";
+                    throw new Error(msg);
                 }
-
-                setMetadata({
-                    expires_at: data.expires_at,
-                    views_remaining: data.views_remaining
-                });
 
                 // 2. Decrypt
                 const decrypted = await decryptSecret(
-                    data.encrypted_payload,
+                    data.encryptedPayload,
                     data.nonce,
                     decryptionKey
                 );
 
                 setSecretValue(decrypted);
-
-                // 3. Decrement view count if needed (best effort)
-                // Note: The RPC might fail if the user is unauthenticated and RLS/Policies block it.
-                // But typically for this use case, we allow anyone to call it via the policy we set?
-                // Wait, in step 69 I created `read_shared_secret` as SECURITY DEFINER
-                // This means it runs with permissions of the creator of the function (postgres usually, or an admin role)
-                // So it should bypass RLS for the update.
-                // However, we need to make sure the public role can EXECUTE it.
-                // Assuming default permissions allow public execution or need explicit grant.
-                // Let's try calling it.
-                if (data.views_remaining !== null) {
-                   await supabase.rpc('read_shared_secret', { secret_id: id });
-                }
 
             } catch (err) {
                 console.error("Fetch error:", err);

@@ -28,12 +28,30 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet";
+import { motion, AnimatePresence } from "@/components/motion";
+import { fade } from "@/lib/motion";
 
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-    const { user, userData, signOut } = useAuth();
+    const { user, userData, loading, lock, signOut } = useAuth();
     const pathname = usePathname();
     const router = useRouter();
+
+    // Client-side route guard (InstantDB auth lives in the browser, not cookies).
+    React.useEffect(() => {
+        if (!loading && !user) {
+            const returnTo = encodeURIComponent(pathname);
+            router.replace(`/login?returnTo=${returnTo}`);
+        }
+    }, [loading, user, pathname, router]);
+
+    if (loading || !user) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <Shield className="w-6 h-6 text-primary animate-pulse" />
+            </div>
+        );
+    }
 
     const navItems = [
         { href: "/vaults", icon: LayoutDashboard, label: "Vaults" },
@@ -108,12 +126,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         <div className="flex items-center gap-3 p-2 rounded-md hover:bg-secondary/50 transition-colors">
                             <Avatar className="h-8 w-8 border border-border">
                                 <AvatarFallback className="bg-secondary text-muted-foreground text-xs">
-                                    {(userData?.full_name || user?.email)?.[0]?.toUpperCase()}
+                                    {(userData?.fullName || user?.email)?.[0]?.toUpperCase()}
                                 </AvatarFallback>
                             </Avatar>
                             <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium truncate text-foreground">
-                                    {userData?.full_name || user?.email?.split('@')[0]}
+                                    {userData?.fullName || user?.email?.split('@')[0]}
                                 </p>
                                 <p className="text-[10px] text-muted-foreground truncate uppercase">
                                     {userData?.role || 'Free Plan'}
@@ -196,12 +214,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                                     <div className="flex items-center gap-3 p-2">
                                         <Avatar className="h-8 w-8 border border-border">
                                             <AvatarFallback className="bg-secondary text-muted-foreground text-xs">
-                                                {(userData?.full_name || user?.email)?.[0]?.toUpperCase()}
+                                                {(userData?.fullName || user?.email)?.[0]?.toUpperCase()}
                                             </AvatarFallback>
                                         </Avatar>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-xs font-medium truncate text-foreground">
-                                                {userData?.full_name || user?.email?.split('@')[0]}
+                                                {userData?.fullName || user?.email?.split('@')[0]}
                                             </p>
                                             <p className="text-[10px] text-muted-foreground truncate uppercase">
                                                 {userData?.role || 'Free Plan'}
@@ -263,6 +281,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                                     <span>Settings</span>
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={lock} className="rounded-sm gap-2 text-xs py-2">
+                                    <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                                    <span>Lock</span>
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={handleSignOut} className="rounded-sm gap-2 text-xs py-2 text-destructive focus:bg-destructive/10 focus:text-destructive">
                                     <LogOut className="h-3.5 w-3.5" />
                                     <span>Sign Out</span>
@@ -272,7 +294,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     </div>
                 </div>
                 <div className="flex-1 p-6 lg:p-10 max-w-7xl mx-auto w-full">
-                    {children}
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={pathname}
+                            variants={fade}
+                            initial="hidden"
+                            animate="show"
+                            exit="exit"
+                        >
+                            {children}
+                        </motion.div>
+                    </AnimatePresence>
                 </div>
             </main>
         </div>

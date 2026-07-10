@@ -19,11 +19,12 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/auth-context";
 import { sendVaultInvitation } from "@/lib/actions";
 import { encryptVaultKeyForUser } from "@/lib/crypto";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/db";
+import { api, bearer } from "@/lib/http/client";
 import { cn } from "@/lib/utils";
 import { VaultMember } from "@/types";
 import { ChevronDown, Loader2, MoreHorizontal, Shield, ShieldCheck, User, UserPlus, Users, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 interface VaultMembersDialogProps {
@@ -41,38 +42,26 @@ export function VaultMembersDialog({
     vaultName,
     vaultKey,
 }: VaultMembersDialogProps) {
-    const { user } = useAuth();
-    const [members, setMembers] = useState<VaultMember[]>([]);
-    const [loading, setLoading] = useState(false);
+    const { user, userData } = useAuth();
     const [inviteEmail, setInviteEmail] = useState("");
     const [inviteRole, setInviteRole] = useState<"moderator" | "member">("member");
     const [inviting, setInviting] = useState(false);
 
+    // Live list of members for this vault (scoped by InstantDB permissions).
+    const { data, isLoading: loading } = db.useQuery(
+        open
+            ? {
+                  vaultMembers: {
+                      $: { where: { "vault.id": vaultId } },
+                      member: { $user: {} },
+                  },
+              }
+            : null,
+    );
+    const members = (data?.vaultMembers ?? []) as VaultMember[];
+
     // Current user's role in this vault
-    const myRole = members.find(m => m.user_id === user?.id)?.role;
-
-    const fetchMembers = useCallback(async () => {
-        setLoading(true);
-        try {
-            const { data, error } = await supabase
-                .from("vault_members")
-                .select(`
-                    *,
-                    users (
-                        email,
-                        public_key
-                    )
-                `)
-                .eq("vault_id", vaultId);
-
-            if (error) throw error;
-            setMembers(data || []);
-        } catch {
-            toast.error("Failed to fetch members");
-        } finally {
-            setLoading(false);
-        }
-    }, [vaultId]);
+    const myRole = members.find(m => m.member?.id === userData?.id)?.role;
 
     const handleInvite = async () => {
         if (!vaultKey) {
@@ -86,61 +75,61 @@ export function VaultMembersDialog({
 
         setInviting(true);
         try {
-            // 1. Find the user
-            const { data, error: userError } = await supabase
-                .rpc("search_user_by_email", { search_email: inviteEmail.trim() })
-                .single();
+            // 1. Find the user via server route (clients cannot enumerate users).
+            const authUser = await db.getAuth();
+            const res = await api.users.search.$post(
+                { json: { email: inviteEmail.trim() } },
+                { headers: bearer(authUser?.refresh_token) },
+            );
+            const found = res.ok ? await res.json() : null;
 
-            const userData = data as { id: string; email: string; public_key: string } | null;
-
-            if (userError || !userData) {
+            if (!found) {
                 toast.error("User not found via email");
                 setInviting(false);
                 return;
             }
 
             // Check if already a member
-            if (members.some(m => m.user_id === userData.id)) {
+            if (members.some(m => m.member?.id === found.profileId)) {
                 toast.error("User is already a member");
                 setInviting(false);
                 return;
             }
 
             // 2. Encrypt vault key for the new member
-            const encryptedKey = await encryptVaultKeyForUser(vaultKey, userData.public_key);
+            const encryptedKey = await encryptVaultKeyForUser(vaultKey, found.publicKey);
 
-            // 3. Add to vault_members
-            const { data: newMember, error: insertError } = await supabase
-                .from("vault_members")
-                .insert({
-                    vault_id: vaultId,
-                    user_id: userData.id,
-                    role: inviteRole,
-                    encrypted_vault_key: encryptedKey,
-                })
-                .select(`
-                    *,
-                    users (
-                        email,
-                        public_key
-                    )
-                `)
-                .single();
-
-            if (insertError) throw insertError;
-            if (newMember) {
-                setMembers([...members, newMember]);
+            // 3. Add the membership server-side (linking another user's profile
+            //    requires admin privileges; the route authorizes the caller).
+            const addRes = await api.vaults.members.$post(
+                {
+                    json: {
+                        vaultId,
+                        memberProfileId: found.profileId,
+                        role: inviteRole,
+                        encryptedVaultKey: encryptedKey,
+                    },
+                },
+                { headers: bearer(authUser?.refresh_token) },
+            );
+            if (!addRes.ok) {
+                const err = (await addRes.json().catch(() => ({}))) as { error?: unknown };
+                throw new Error(
+                    typeof err.error === "string" ? err.error : "Failed to add member",
+                );
             }
             setInviteEmail("");
 
             // 4. Send email notification via Server Action
             try {
-                await sendVaultInvitation({
-                    vaultName,
-                    inviteeEmail: userData.email,
-                    role: inviteRole,
-                    inviterEmail: user?.email,
-                });
+                if (authUser?.refresh_token) {
+                    await sendVaultInvitation({
+                        instantToken: authUser.refresh_token,
+                        vaultName,
+                        inviteeEmail: found.email,
+                        role: inviteRole,
+                    });
+                }
             } catch (emailErr) {
                 console.error("Failed to send invitation email:", emailErr);
             }
@@ -154,11 +143,11 @@ export function VaultMembersDialog({
         }
     };
 
-    const canRemove = (targetId: string, targetRole: string) => {
-        if (!user) return false;
+    const canRemove = (targetProfileId: string | undefined, targetRole: string) => {
+        if (!userData) return false;
 
         // Anyone can remove themselves
-        if (targetId === user.id) return true;
+        if (targetProfileId === userData.id) return true;
 
         // Owner can remove anyone
         if (myRole === 'owner') return true;
@@ -169,27 +158,19 @@ export function VaultMembersDialog({
         return false;
     };
 
-    const removeMember = async (userId: string) => {
+    const removeMember = async (memberRowId: string) => {
         try {
-            const { error } = await supabase
-                .from("vault_members")
-                .delete()
-                .eq("vault_id", vaultId)
-                .eq("user_id", userId);
-
-            if (error) throw error;
-            setMembers(members.filter(m => m.user_id !== userId));
+            const authUser = await db.getAuth();
+            const res = await api.vaults.members.$delete(
+                { json: { memberRowId } },
+                { headers: bearer(authUser?.refresh_token) },
+            );
+            if (!res.ok) throw new Error("remove failed");
             toast.success("Member removed");
         } catch {
             toast.error("Failed to remove member");
         }
     };
-
-    useEffect(() => {
-        if (open) {
-            fetchMembers();
-        }
-    }, [open, fetchMembers]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -256,16 +237,16 @@ export function VaultMembersDialog({
                                 </div>
                             ) : (
                                 members.map((member) => (
-                                    <div key={member.user_id} className="group flex items-center justify-between p-2 rounded-md hover:bg-secondary/30 transition-all">
+                                    <div key={member.id} className="group flex items-center justify-between p-2 rounded-md hover:bg-secondary/30 transition-all">
                                         <div className="flex items-center gap-3 min-w-0">
                                             <Avatar className="h-8 w-8 border border-border shrink-0">
                                                 <AvatarFallback className="bg-primary/5 text-primary font-bold text-[10px]">
-                                                    {member.users?.email?.[0].toUpperCase()}
+                                                    {member.member?.$user?.email?.[0]?.toUpperCase()}
                                                 </AvatarFallback>
                                             </Avatar>
                                             <div className="flex flex-col min-w-0">
-                                                <span className="text-[11px] font-bold text-foreground leading-tight truncate">{member.users?.email?.split('@')[0]}</span>
-                                                <span className="text-[9px] text-muted-foreground truncate font-medium">{member.users?.email}</span>
+                                                <span className="text-[11px] font-bold text-foreground leading-tight truncate">{member.member?.$user?.email?.split('@')[0]}</span>
+                                                <span className="text-[9px] text-muted-foreground truncate font-medium">{member.member?.$user?.email}</span>
                                             </div>
                                         </div>
 
@@ -284,7 +265,7 @@ export function VaultMembersDialog({
                                                 {member.role}
                                             </div>
 
-                                            {canRemove(member.user_id, member.role) && !(member.role === "owner" && member.user_id === user?.id) && (
+                                            {canRemove(member.member?.id, member.role) && !(member.role === "owner" && member.member?.id === userData?.id) && (
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
                                                         <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:bg-secondary">
@@ -292,9 +273,9 @@ export function VaultMembersDialog({
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end" className="rounded-md border-border p-1">
-                                                        <DropdownMenuItem className="text-xs text-destructive focus:bg-destructive/10 focus:text-destructive py-1.5 gap-2" onClick={() => removeMember(member.user_id)}>
+                                                        <DropdownMenuItem className="text-xs text-destructive focus:bg-destructive/10 focus:text-destructive py-1.5 gap-2" onClick={() => removeMember(member.id)}>
                                                             <X className="h-3.5 w-3.5" />
-                                                            <span>{member.user_id === user?.id ? "Leave Vault" : "Remove"}</span>
+                                                            <span>{member.member?.id === userData?.id ? "Leave Vault" : "Remove"}</span>
                                                         </DropdownMenuItem>
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
