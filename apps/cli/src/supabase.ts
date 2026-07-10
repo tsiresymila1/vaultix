@@ -1,35 +1,44 @@
 import dotenv from "dotenv";
 import path from "node:path";
+import { createApiClient } from "@vaultix/api-client";
 import { loadConfig } from "./config";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env"), quiet: true });
 
-export async function callCliApi(action: string, params: Record<string, unknown> = {}) {
-    const config = loadConfig();
-    const token = config.token;
-    // Prefer using the same URL as login.ts
-    const APP_URL = process.env.VAULTIX_APP_URL || "https://vaultix-secure.vercel.app";
+// Typed Hono RPC call to the /api/cli proxy. Returns the { data, error } shape
+// the CLI commands consume.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type CliApiResult = { data: any; error: any };
 
-    if (!token) return { error: "Not logged in. Please run `vaultix login` first.", data: null };
+export async function callCliApi(
+  action: string,
+  params: Record<string, unknown> = {},
+): Promise<CliApiResult> {
+  const config = loadConfig();
+  const token = config.token;
+  const APP_URL = process.env.VAULTIX_APP_URL || "https://vaultix-secure.vercel.app";
 
-    try {
-        const response = await fetch(`${APP_URL}/api/cli`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
-            },
-            body: JSON.stringify({ action, params })
-        });
+  if (!token) {
+    return { error: "Not logged in. Please run `vaultix login` first.", data: null };
+  }
 
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: "API request failed" })) as { error?: string };
-            return { error: errorData.error || "API request failed", data: null };
-        }
+  try {
+    const api = createApiClient(APP_URL).api;
+    const res = await api.cli.$post(
+      // action is validated server-side against the CliAction enum.
+      { json: { action, params } as never },
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
 
-        return await response.json();
-    } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        return { error: message, data: null };
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({ error: "API request failed" }))) as {
+        error?: string;
+      };
+      return { error: err.error || "API request failed", data: null };
     }
+    return (await res.json()) as CliApiResult;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: message, data: null };
+  }
 }

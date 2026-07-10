@@ -3,7 +3,7 @@
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { db } from "@/lib/db";
-import { api } from "@/lib/http/client";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Shield, Loader2, LogIn } from "lucide-react";

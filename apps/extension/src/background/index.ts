@@ -2,9 +2,7 @@
 
 import { decryptSecret, decryptVaultKey } from "../shared/crypto";
 import type { PasswordEntry, UserData } from "../shared/types";
-
-const VAULTIX_URL =
-  import.meta.env.VITE_VAULTIX_URL || "https://vaultix-secure.vercel.app";
+import { api } from "../shared/api";
 
 const STORAGE_KEYS = {
   masterKey: 'vaultix_master_key',
@@ -114,9 +112,10 @@ async function fetchPasswords(): Promise<PasswordEntry[]> {
     STORAGE_KEYS.accessToken,
   );
   if (!token) return [];
-  const res = await fetch(`${VAULTIX_URL}/api/extension/passwords`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const res = await api.extension.passwords.$get(
+    {},
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
   if (!res.ok) return [];
   const data = await res.json();
   return (data.passwords ?? []) as PasswordEntry[];

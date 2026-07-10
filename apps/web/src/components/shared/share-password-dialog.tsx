@@ -24,7 +24,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { db } from "@/lib/db";
 import { id } from "@instantdb/react";
-import { api, bearer } from "@/lib/http/client";
+import { api, bearer } from "@/lib/api";
 import { useAuth } from "@/context/auth-context";
 
 interface ShareEntry {

@@ -12,6 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@vaultix/api": "workspace:*",
+    "@vaultix/api-client": "workspace:*",
     "@vaultix/crypto": "workspace:*",
     "@vaultix/schema": "workspace:*",
     "@bprogress/next": "^3.2.12",

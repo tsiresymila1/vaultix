@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/context/auth-context";
 import { db } from "@/lib/db";
-import { api, bearer } from "@/lib/http/client";
+import { api, bearer } from "@/lib/api";
 import {
   toBase64,
   fromBase64,

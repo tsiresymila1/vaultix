@@ -1,5 +1,5 @@
 import { handle } from "hono/vercel";
-import app from "@/lib/http/app";
+import app from "@vaultix/api";
 
 export const runtime = "nodejs";
 

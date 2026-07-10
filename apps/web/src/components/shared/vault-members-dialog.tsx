@@ -20,7 +20,7 @@ import { useAuth } from "@/context/auth-context";
 import { sendVaultInvitation } from "@/lib/actions";
 import { encryptVaultKeyForUser } from "@/lib/crypto";
 import { db } from "@/lib/db";
-import { api, bearer } from "@/lib/http/client";
+import { api, bearer } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { VaultMember } from "@/types";
 import { ChevronDown, Loader2, MoreHorizontal, Shield, ShieldCheck, User, UserPlus, Users, X } from "lucide-react";

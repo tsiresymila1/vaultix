@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { OTPAuthenticator } from "@/components/shared/otp-authenticator";
 import { decryptSecret } from "@/lib/crypto";
-import { api } from "@/lib/http/client";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { AlertCircle, Check, Copy, Eye, EyeOff, Loader2, Lock, ShieldCheck, Timer } from "lucide-react";
 import { FormEvent, MouseEvent, useEffect, useState } from "react";

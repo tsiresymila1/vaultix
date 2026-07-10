@@ -30,6 +30,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@vaultix/api-client": "workspace:*",
     "@vaultix/crypto": "workspace:*",
     "commander": "^14.0.2",
     "cross-spawn": "^7.0.6",

@@ -1,7 +1,6 @@
 "use server";
 
-import { createAdminDb } from "@/lib/db-admin";
-import { serverEnv } from "@/lib/env";
+import { createAdminDb, serverEnv } from "@vaultix/api";
 
 export async function sendVaultInvitation({
   instantToken,

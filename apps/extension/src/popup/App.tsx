@@ -20,6 +20,7 @@ import {
   initSodium,
 } from "../shared/crypto";
 import type { PasswordEntry } from "../shared/types";
+import { api, VAULTIX_URL } from "../shared/api";
 
 const STORAGE_KEYS = {
   masterKey: "vaultix_master_key",
@@ -27,9 +28,6 @@ const STORAGE_KEYS = {
   isUnlocked: "vaultix_is_unlocked",
   accessToken: "vaultix_access_token",
 };
-
-const VAULTIX_URL =
-  import.meta.env.VITE_VAULTIX_URL || "https://vaultix-secure.vercel.app";
 
 interface ExtensionUserData {
   id: string;
@@ -273,12 +271,10 @@ export default function App() {
     try {
       setAuthenticating(true);
 
-      const response = await fetch(`${VAULTIX_URL}/api/extension/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await api.extension.me.$get(
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -294,7 +290,7 @@ export default function App() {
         [STORAGE_KEYS.userData]: data.user,
       });
 
-      setUserData(data.user);
+      setUserData(data.user as ExtensionUserData);
     } catch (err) {
       console.error("Error fetching user data:", err);
       setError("Failed to connect to Vaultix. Please sign in again.");
@@ -321,12 +317,10 @@ export default function App() {
       if (!token) return;
 
       console.log("loadPasswords: fetching from API...");
-      const response = await fetch(`${VAULTIX_URL}/api/extension/passwords`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await api.extension.passwords.$get(
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
 
       console.log("loadPasswords: response status:", response.status);
 
@@ -336,7 +330,7 @@ export default function App() {
           "loadPasswords: got passwords:",
           data.passwords?.length || 0,
         );
-        setPasswords(data.passwords || []);
+        setPasswords((data.passwords || []) as PasswordEntry[]);
       } else {
         const error = await response.text();
         console.log("loadPasswords: error:", error);

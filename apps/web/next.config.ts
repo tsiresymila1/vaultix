@@ -15,6 +15,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // @vaultix/api ships as TypeScript source; Next transpiles it.
+  transpilePackages: ["@vaultix/api", "@vaultix/api-client"],
   serverExternalPackages: ["libsodium-wrappers", "libsodium-wrappers-sumo"],
   images: {
     remotePatterns: [

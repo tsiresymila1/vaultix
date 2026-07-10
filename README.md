@@ -111,9 +111,14 @@ apps/
   cli/         standalone CLI (@vaultix/cli)
   extension/   Chrome extension (@vaultix/extension)
 packages/
+  api/         Hono backend — routers/controllers/services (@vaultix/api)
+  api-client/  typed Hono RPC client (@vaultix/api-client)
   crypto/      shared libsodium crypto (@vaultix/crypto)
   schema/      InstantDB schema + perms + entity types (@vaultix/schema)
 ```
+
+The backend lives in `@vaultix/api` (web mounts it at `/api/[[...route]]`); web,
+extension, and CLI all call it through the typed `@vaultix/api-client` RPC client.
 
 ## 🏗 Development Setup
 
