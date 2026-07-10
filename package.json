@@ -10,7 +10,8 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "dev:web": "turbo run dev --filter=@vaultix/web",
-    "build:web": "turbo run build --filter=@vaultix/web"
+    "build:web": "turbo run build --filter=@vaultix/web",
+    "release": "bash scripts/release.sh"
   },
   "devDependencies": {
     "turbo": "^2.5.8"
