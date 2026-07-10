@@ -1,7 +1,7 @@
 "use client";
 
 import { init } from "@instantdb/react";
-import schema from "../../instant.schema";
+import { schema } from "@vaultix/schema";
 import { clientEnv } from "@/lib/env";
 
 /**

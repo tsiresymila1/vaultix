@@ -1,0 +1,26 @@
+{
+  "name": "@vaultix/schema",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "push:schema": "instant-cli push schema",
+    "push:perms": "instant-cli push perms"
+  },
+  "dependencies": {
+    "@instantdb/react": "^1.0.49"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

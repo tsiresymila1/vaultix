@@ -1,5 +1,5 @@
 {
-  "name": "cli",
+  "name": "@vaultix/cli",
   "version": "1.0.0",
   "main": "dist/cli.js",
   "bin": {
@@ -7,6 +7,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "pkg": "pkg . --output bin/vaultix",
     "start": "ts-node src/cli.ts"
   },
@@ -29,6 +30,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@vaultix/crypto": "workspace:*",
     "commander": "^14.0.2",
     "cross-spawn": "^7.0.6",
     "dotenv": "^17.2.3",

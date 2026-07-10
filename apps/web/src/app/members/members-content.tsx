@@ -16,7 +16,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/lib/db";
 import type { InstaQLEntity } from "@instantdb/react";
-import type { AppSchema } from "../../../instant.schema";
+import type { AppSchema } from "@vaultix/schema";
 import { Ban, CheckCircle, MoreHorizontal, Shield, ShieldCheck, UserCheck, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";

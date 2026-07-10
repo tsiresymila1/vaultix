@@ -1,20 +1,7 @@
 import type { InstaQLEntity } from "@instantdb/react";
-import type { AppSchema } from "../../instant.schema";
+import type { AppSchema } from "./instant.schema";
 
-// Auth identity (from InstantDB magic-code auth).
-export interface AuthUser {
-  id: string;
-  email: string;
-}
-
-export interface UserSettings {
-  theme?: "light" | "dark" | "system";
-  email_notifications?: boolean;
-  auto_lock?: boolean;
-  lock_timeout?: number;
-}
-
-// Profile = zero-knowledge crypto material + app fields, linked 1-1 to $users.
+// Entity types derived from the InstantDB schema.
 export type Profile = InstaQLEntity<AppSchema, "profiles">;
 export type Vault = InstaQLEntity<AppSchema, "vaults">;
 export type Environment = InstaQLEntity<AppSchema, "environments">;

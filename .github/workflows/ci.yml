@@ -30,8 +30,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # turbo runs each task across the workspace in dependency order
+      # (shared packages build before the apps that consume them).
       - name: Typecheck
-        run: pnpm exec tsc --noEmit
+        run: pnpm typecheck
 
       - name: Lint
         run: pnpm lint

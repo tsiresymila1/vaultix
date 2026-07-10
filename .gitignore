@@ -1,42 +1,41 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
-/node_modules
+node_modules/
+.pnp
+.pnp.*
+
+# env (allow the example templates)
 .env
 .env.*
-.vaultix/
-**/.vaultix/
-cli/dist/
-cli/bin/
-cli/src/*.js
-cli/src/*.js.map
-cli/src/*.d.ts
-cli/src/*.d.ts.map
-cli/src/commands/*.js
-cli/src/commands/*.js.map
-cli/src/commands/*.d.ts
-cli/src/commands/*.d.ts.map
-/cli/node_modules
+!.env.exemple
+!.env.example
 
-extension/dist
-extension/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+# turbo
+.turbo/
+
+# build outputs
+**/.next/
+**/dist/
+**/out/
+/build
+apps/cli/bin/
+apps/cli/src/*.js
+apps/cli/src/*.js.map
+apps/cli/src/*.d.ts
+apps/cli/src/*.d.ts.map
+apps/cli/src/**/*.js
+apps/cli/src/**/*.js.map
+apps/cli/src/**/*.d.ts
+apps/cli/src/**/*.d.ts.map
 
 # testing
 /coverage
 
-# next.js
-/.next/
-/out/
+# vercel
+.vercel
 
-# production
-/build
+# typescript
+*.tsbuildinfo
+next-env.d.ts
 
 # misc
 .DS_Store
@@ -48,16 +47,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-./cli/bin/*
-
+# generated
 graphify-out/cache
+
+# local vaultix project link
+.vaultix/
+**/.vaultix/

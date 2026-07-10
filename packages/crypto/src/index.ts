@@ -1,4 +1,3 @@
-"use client";
 
 import sodium from "libsodium-wrappers-sumo";
 
@@ -186,3 +185,10 @@ export async function fromBase64(data: string): Promise<Uint8Array> {
     return sodium.from_base64(data);
 }
 
+
+/* ---------- RAW ACCESS ---------- */
+/** Returns the initialized libsodium instance (for advanced/raw operations). */
+export async function getSodium(): Promise<typeof sodium> {
+    await sodium.ready;
+    return sodium;
+}

@@ -101,6 +101,20 @@ vaultix logout
 
 This ensures that only authenticated members with the correct master password can ever decrypt the vault's contents.
 
+## 🏗 Monorepo layout
+
+Turborepo + pnpm workspace:
+
+```
+apps/
+  web/         Next.js web app (@vaultix/web)
+  cli/         standalone CLI (@vaultix/cli)
+  extension/   Chrome extension (@vaultix/extension)
+packages/
+  crypto/      shared libsodium crypto (@vaultix/crypto)
+  schema/      InstantDB schema + perms + entity types (@vaultix/schema)
+```
+
 ## 🏗 Development Setup
 
 1. **Clone the repo**
@@ -110,25 +124,24 @@ This ensures that only authenticated members with the correct master password ca
    cd vaultix
    ```
 
-2. **Install dependencies** (this repo uses **pnpm**)
+2. **Install dependencies** (pnpm workspace — one install for everything)
 
    ```bash
    pnpm install
    ```
 
-3. **Create an InstantDB app**
-   Sign up at [instantdb.com](https://instantdb.com), then:
+3. **Create an InstantDB app** — the schema lives in `packages/schema`:
 
    ```bash
    npx instant-cli@latest login
-   npx instant-cli@latest init      # links this repo to an app; writes the App ID
-   npx instant-cli@latest push schema   # pushes instant.schema.ts
-   npx instant-cli@latest push perms    # pushes instant.perms.ts
+   cd packages/schema
+   npx instant-cli@latest push schema --app <APP_ID> --yes
+   npx instant-cli@latest push perms  --app <APP_ID> --yes
+   cd ../..
    ```
 
 4. **Environment Setup**
-   Copy `.env.exemple` to `.env` and fill it in (App ID + Admin token from the
-   InstantDB dashboard, plus generated secrets):
+   Copy `apps/web/.env.exemple` to `apps/web/.env` and fill it in:
 
    ```
    NEXT_PUBLIC_INSTANT_APP_ID=your-instant-app-id
@@ -137,10 +150,19 @@ This ensures that only authenticated members with the correct master password ca
    CRON_SECRET=$(openssl rand -hex 16)
    ```
 
-5. **Run Development Server**
+5. **Run** (turbo builds shared packages first, then starts the app)
+
    ```bash
-   pnpm dev
+   pnpm dev            # everything
+   pnpm dev:web        # web app only
+   pnpm build          # build all
+   pnpm test           # run tests
    ```
+
+   Web app → http://localhost:3000
+
+**Deploy (Vercel):** set the project **Root Directory** to `apps/web`.
+**Extension:** `apps/extension` — set `VITE_VAULTIX_URL` then `pnpm --filter @vaultix/extension build`.
 
 ### Authentication model
 
