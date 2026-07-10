@@ -160,6 +160,8 @@ export default function App() {
 
       console.log("InitApp: No stored auth found");
 
+      // Legacy fallback: auth data handed off via localStorage.
+      const webAuthData = localStorage.getItem("vaultix_extension_auth");
       if (webAuthData) {
         const authData = JSON.parse(webAuthData);
         console.log("InitApp: Processing web auth data", authData.email);
@@ -346,7 +348,7 @@ export default function App() {
     setAuthenticating(true);
 
     try {
-      await sodium.ready;
+      await initSodium();
 
       if (!userData?.master_key_salt) {
         setError("No user data found. Please sign in first.");

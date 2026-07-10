@@ -22,6 +22,7 @@
     "src/vite-env.d.ts",
     "src/shared/**/*",
     "src/background/**/*",
-    "src/content/**/*"
+    "src/content/**/*",
+    "src/popup/**/*"
   ]
 }

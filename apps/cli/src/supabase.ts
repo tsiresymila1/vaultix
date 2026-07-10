@@ -11,7 +11,7 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env"), quiet: true });
 type CliApiResult = { data: any; error: any };
 
 export async function callCliApi(
-  action: string,
+  action: "get-user-crypto" | "get-vault-access" | "get-environment" | "get-secrets" | "get-user-vaults" | "list-envs" | "list-vaults",
   params: Record<string, unknown> = {},
 ): Promise<CliApiResult> {
   const config = loadConfig();
