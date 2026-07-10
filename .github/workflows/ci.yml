@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_INSTANT_APP_ID: "00000000-0000-0000-0000-000000000000"
+      INSTANT_ADMIN_TOKEN: "ci-dummy-admin-token"
+      AUTH_JWT_SECRET: "ci-dummy-cli-jwt-secret-at-least-32-chars-long"
+      CRON_SECRET: "ci-dummy-cron-secret-16chars"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # turbo runs each task across the workspace in dependency order
+      # (shared packages build before the apps that consume them).
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Audit (non-blocking)
+        run: pnpm audit --prod || true

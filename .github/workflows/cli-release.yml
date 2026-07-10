@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.2.3)"
+        required: true
 
 permissions:
   contents: write
@@ -14,31 +19,37 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # On manual dispatch, check out the requested tag; on push, the tag ref.
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
-          cache-dependency-path: cli/package-lock.json
+          cache: pnpm
 
       - name: Install dependencies
-        run: |
-          cd cli
-          npm install
+        run: pnpm install --frozen-lockfile
 
-      - name: Build and Package
-        run: |
-          cd cli
-          npm run build
-          npm run pkg
+      - name: Build (with shared packages)
+        run: pnpm build --filter=@vaultix/cli
+
+      - name: Package CLI binaries
+        run: pnpm --filter=@vaultix/cli pkg
 
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: |
-            cli/bin/vaultix-*
+            apps/cli/bin/vaultix-*
           draft: false
           prerelease: false
           generate_release_notes: true
