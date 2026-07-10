@@ -1,6 +1,60 @@
 import { HTTPException } from "hono/http-exception";
+import { id } from "@instantdb/admin";
 import { createAdminDb } from "../db-admin";
+import { wrapKey, unwrapKey } from "../keyvault";
 import type { AuthedUser } from "../types";
+
+interface SetupInput {
+  publicKey: string;
+  privateKey: string; // raw, base64 — server wraps it under the app key
+  fullName?: string;
+}
+
+/**
+ * Create the caller's profile (registration). The server wraps the raw private
+ * key under the app key at rest. Idempotent: existing profile is returned as-is.
+ */
+export async function setupProfile(user: AuthedUser, input: SetupInput) {
+  const db = createAdminDb();
+  const { profiles } = await db.query({
+    profiles: { $: { where: { "$user.id": user.id } } },
+  });
+  const existing = profiles?.[0];
+  if (existing) return { ok: true, created: false, profileId: existing.id };
+
+  const profileId = id();
+  await db.transact(
+    db.tx.profiles[profileId]
+      .update({
+        publicKey: input.publicKey,
+        encryptedPrivateKey: wrapKey(input.privateKey),
+        fullName: input.fullName,
+        role: "user",
+        status: "active",
+        createdAt: Date.now(),
+      })
+      .link({ $user: user.id }),
+  );
+  return { ok: true, created: true, profileId };
+}
+
+/** The caller's own keys: public key + the unwrapped raw private key. Returned
+ *  after magic-code login so the client can decrypt vaults/passwords. */
+export async function getMyKeys(user: AuthedUser) {
+  const db = createAdminDb();
+  const { profiles } = await db.query({
+    profiles: { $: { where: { "$user.id": user.id } } },
+  });
+  const p = profiles?.[0];
+  if (!p) return { profile: null };
+  return {
+    profile: {
+      id: p.id,
+      publicKey: p.publicKey,
+      privateKey: unwrapKey(p.encryptedPrivateKey),
+    },
+  };
+}
 
 /** Permanently delete the user's app data and $users identity. */
 export async function deleteAccount(user: AuthedUser) {

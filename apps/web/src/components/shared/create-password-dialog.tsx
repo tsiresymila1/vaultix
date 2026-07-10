@@ -17,6 +17,7 @@ import { RefreshCw, Key, Shield } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/auth-context";
+import { usePasswordVault } from "@/context/password-vault";
 import { db } from "@/lib/db";
 import { id } from "@instantdb/react";
 import {
@@ -43,7 +44,8 @@ export function CreatePasswordDialog({
     editEntry,
     decryptedData,
 }: CreatePasswordDialogProps) {
-    const { privateKey, userData } = useAuth();
+    const { userData } = useAuth();
+    const { pwPrivateKey, pwPublicKey } = usePasswordVault();
     const [loading, setLoading] = useState(false);
     const [title, setTitle] = useState("");
     const [websiteUrl, setWebsiteUrl] = useState("");
@@ -72,9 +74,13 @@ export function CreatePasswordDialog({
 
     const generatePassword = () => {
         const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+";
+        const length = 16;
+        // Cryptographically secure RNG (Web Crypto) instead of Math.random().
+        const randomValues = new Uint32Array(length);
+        crypto.getRandomValues(randomValues);
         let newPassword = "";
-        for (let i = 0; i < 16; i++) {
-            newPassword += charset.charAt(Math.floor(Math.random() * charset.length));
+        for (let i = 0; i < length; i++) {
+            newPassword += charset.charAt(randomValues[i] % charset.length);
         }
         setPassword(newPassword);
     };
@@ -86,7 +92,7 @@ export function CreatePasswordDialog({
         }
 
         setLoading(true);
-        if (!privateKey || !userData?.publicKey) {
+        if (!pwPrivateKey || !pwPublicKey || !userData?.id) {
             toast.error("Vault locked. Please unlock first.");
             setLoading(false);
             return;
@@ -98,8 +104,8 @@ export function CreatePasswordDialog({
             const entryKey = editEntry
                 ? await decryptVaultKeyWithPrivateKey(
                       editEntry.ownerEncryptedKey,
-                      userData.publicKey,
-                      privateKey,
+                      pwPublicKey,
+                      pwPrivateKey,
                   )
                 : await generateVaultKey();
 
@@ -129,7 +135,7 @@ export function CreatePasswordDialog({
                 );
                 toast.success("Password entry updated successfully!");
             } else {
-                const ownerEncryptedKey = await encryptVaultKeyForUser(entryKey, userData.publicKey);
+                const ownerEncryptedKey = await encryptVaultKeyForUser(entryKey, pwPublicKey);
                 await db.transact(
                     db.tx.passwordEntries[id()]
                         .update({

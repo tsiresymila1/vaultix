@@ -2,6 +2,7 @@
 // call and jwt.ts reads AUTH_JWT_SECRET through it.
 process.env.AUTH_JWT_SECRET = "test-cli-jwt-secret-at-least-32-chars-long";
 process.env.INSTANT_ADMIN_TOKEN = "test-admin-token";
+process.env.SECRETS_ENC_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 process.env.CRON_SECRET = "test-cron-secret-16chars";
 process.env.NEXT_PUBLIC_INSTANT_APP_ID = "00000000-0000-0000-0000-000000000000";
 

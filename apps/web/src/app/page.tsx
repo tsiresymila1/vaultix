@@ -3,9 +3,11 @@
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Book, Check, Copy, Link as LinkIcon, Lock, Share2, Shield, Smartphone, Terminal } from "lucide-react";
+import { ArrowRight, Book, Check, Copy, Key, Link as LinkIcon, Lock, Share2, Shield, Smartphone, Terminal } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { motion } from "@/components/motion";
+import { fadeInUp, staggerContainer, fade } from "@/lib/motion";
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -44,19 +46,25 @@ export default function HomePage() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="py-24 px-6 md:py-32 flex flex-col items-center text-center max-w-5xl mx-auto space-y-8">
-          <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-sm font-medium text-primary">
-            <span className="flex h-2 w-2 rounded-full bg-primary mr-2"></span>
+        <motion.section
+          variants={staggerContainer}
+          initial="hidden"
+          animate="show"
+          className="py-24 px-6 md:py-32 flex flex-col items-center text-center max-w-5xl mx-auto space-y-8"
+        >
+          <motion.div variants={fadeInUp} className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-sm font-medium text-primary">
+            <span className="flex h-2 w-2 rounded-full bg-primary mr-2 motion-safe:animate-pulse"></span>
             v1.0 Public Beta is now live
-          </div>
-          <h1 className="text-4xl md:text-7xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/70">
+          </motion.div>
+          <motion.h1 variants={fadeInUp} className="text-4xl md:text-7xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/70">
             Secure Secrets Manager <br /> for Modern Teams
-          </h1>
-          <p className="text-lg text-muted-foreground max-w-2xl leading-relaxed">
-            Vaultix provides end-to-end encrypted secret management for your infrastructure.
-            Securely share environment variables, API keys, and certificates with your team.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
+          </motion.h1>
+          <motion.p variants={fadeInUp} className="text-lg text-muted-foreground max-w-2xl leading-relaxed">
+            Encrypted environment variables and a shared password vault for your team.
+            Inject secrets with the CLI, autofill passwords with the extension, and share
+            with role-based access — all passwordless.
+          </motion.p>
+          <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row gap-4 w-full justify-center">
             <Link href="/register">
               <Button size="lg" className="h-12 px-8 text-base w-full sm:w-auto">Start for free</Button>
             </Link>
@@ -65,43 +73,43 @@ export default function HomePage() {
                 <Book className="w-5 h-5" /> Explore Documentation
               </Button>
             </Link>
-          </div>
-        </section>
+          </motion.div>
+        </motion.section>
 
         {/* Features Grid */}
         <section id="features" className="py-20 px-6 bg-muted/30 border-y border-border/40">
           <div className="max-w-6xl mx-auto">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              <FeatureCard
-                icon={<Lock className="w-6 h-6" />}
-                title="End-to-End Encryption"
-                description="Your secrets are encrypted client-side using Libsodium (Argon2id + XChaCha20-Poly1305). Only you hold the keys."
-              />
-              <FeatureCard
-                icon={<Terminal className="w-6 h-6" />}
-                title="Developer CLI"
-                description="Inject secrets directly into your development environment or CI/CD pipelines with our robust CLI tool."
-              />
-              <FeatureCard
-                icon={<Share2 className="w-6 h-6" />}
-                title="Vault Sharing"
-                description="Share entire vaults with team members using public-key cryptography. No shared passwords, ever."
-              />
-              <FeatureCard
-                icon={<LinkIcon className="w-6 h-6" />}
-                title="Vaultix Share"
-                description="Share ephemeral secrets via secure public links. Set expiration times and view limits for ultimate control over your data."
-              />
-              <FeatureCard
-                icon={<Smartphone className="w-6 h-6" />}
-                title="Live 2FA Authenticator"
-                description="Built-in TOTP support with a circular progress timer and QR code generation. Sync your codes across devices effortlessly."
-              />
-            </div>
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true, margin: "-80px" }}
+              className="grid md:grid-cols-2 lg:grid-cols-3 gap-8"
+            >
+              {[
+                { icon: <Lock className="w-6 h-6" />, title: "Encrypted Vaults", description: "Environment variables grouped by environment, encrypted with per-vault keys (XChaCha20-Poly1305) and shared to members via public-key cryptography." },
+                { icon: <Terminal className="w-6 h-6" />, title: "Developer CLI", description: "Inject secrets straight into your dev environment or CI/CD pipelines. Never written to disk." },
+                { icon: <Share2 className="w-6 h-6" />, title: "Role-Based Sharing", description: "Share vaults and individual passwords with teammates. Owners, moderators, and read-only members — enforced server-side." },
+                { icon: <Smartphone className="w-6 h-6" />, title: "Browser Extension", description: "Autofill logins on any site and save new passwords from the page, straight from the Chrome extension." },
+                { icon: <LinkIcon className="w-6 h-6" />, title: "Vaultix Share", description: "Share ephemeral secrets via secure public links. Set expiration times and view limits for full control." },
+                { icon: <Key className="w-6 h-6" />, title: "Passwordless Login", description: "Sign in with an email magic code. Your password vault adds a master password for zero-knowledge protection — only you can read it." },
+              ].map((f) => (
+                <motion.div key={f.title} variants={fadeInUp} whileHover={{ y: -4 }}>
+                  <FeatureCard icon={f.icon} title={f.title} description={f.description} />
+                </motion.div>
+              ))}
+            </motion.div>
           </div>
         </section>
         {/* CLI Section */}
-        <section id="cli" className="py-24 px-6 max-w-5xl mx-auto">
+        <motion.section
+          id="cli"
+          variants={fade}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: "-80px" }}
+          className="py-24 px-6 max-w-5xl mx-auto"
+        >
           <div className="flex flex-col items-center text-center space-y-6 mb-12">
             <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Developer-First CLI</h2>
             <p className="text-muted-foreground text-lg max-w-2xl">
@@ -113,7 +121,7 @@ export default function HomePage() {
           <div className="bg-zinc-950 rounded-2xl p-2 shadow-2xl border border-white/10 overflow-hidden">
             <InstallTerminal />
           </div>
-        </section>
+        </motion.section>
       </main>
 
       {/* Footer */}

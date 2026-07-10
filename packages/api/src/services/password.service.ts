@@ -1,4 +1,50 @@
+import { HTTPException } from "hono/http-exception";
+import { id } from "@instantdb/admin";
 import { createAdminDb } from "../db-admin";
+
+interface CreateEntryInput {
+  title: string;
+  websiteUrl?: string;
+  username?: string;
+  encryptedPassword: string;
+  passwordNonce: string;
+  ownerEncryptedKey: string;
+  encryptedOtpSeed?: string;
+  otpNonce?: string;
+  notes?: string;
+}
+
+/** Create a password entry owned by the caller (used by the extension). Content
+ *  is ciphertext produced client-side under a fresh per-entry key. */
+export async function createPasswordEntry(userId: string, input: CreateEntryInput) {
+  const db = createAdminDb();
+  const { profiles } = await db.query({
+    profiles: { $: { where: { "$user.id": userId } } },
+  });
+  const profile = profiles?.[0];
+  if (!profile) throw new HTTPException(400, { message: "Profile not set up" });
+
+  const entryId = id();
+  const now = Date.now();
+  await db.transact(
+    db.tx.passwordEntries[entryId]
+      .update({
+        title: input.title,
+        websiteUrl: input.websiteUrl,
+        username: input.username,
+        encryptedPassword: input.encryptedPassword,
+        passwordNonce: input.passwordNonce,
+        ownerEncryptedKey: input.ownerEncryptedKey,
+        encryptedOtpSeed: input.encryptedOtpSeed,
+        otpNonce: input.otpNonce,
+        notes: input.notes,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .link({ owner: profile.id }),
+  );
+  return { ok: true, entryId };
+}
 
 // A `has: one` nested link may come back as an object or a single-element array
 // depending on the SDK; normalize to the single element.

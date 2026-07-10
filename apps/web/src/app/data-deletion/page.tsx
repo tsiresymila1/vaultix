@@ -94,8 +94,8 @@ export default function DataDeletionPage() {
                                 Warning: This action is permanent
                             </CardTitle>
                             <CardDescription>
-                                Deleting your account will remove all your encrypted secrets, vaults, and sharing history. 
-                                Since we do not have your master password, this data cannot be recovered once deleted.
+                                Deleting your account will remove all your encrypted secrets, vaults, passwords, and sharing history,
+                                along with your identity keys. This is permanent and cannot be undone.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>

@@ -1,10 +1,10 @@
 export interface UserData {
   id: string;
   email: string;
-  public_key: string;
-  encrypted_private_key: string;
-  private_key_nonce: string;
-  master_key_salt: string;
+  pw_public_key: string | null;
+  pw_encrypted_private_key: string | null;
+  pw_private_key_nonce: string | null;
+  pw_salt: string | null;
   full_name?: string;
 }
 

@@ -1,4 +1,5 @@
 import { createAdminDb } from "../db-admin";
+import { unwrapKey } from "../keyvault";
 import type { AuthedUser } from "../types";
 import type { CliAction } from "../schemas";
 
@@ -24,11 +25,10 @@ export async function dispatchCli(
 
   switch (action) {
     case "get-user-crypto":
+      // Server hands the raw private key (unwrapped) — no master password.
       return {
         data: {
-          encrypted_private_key: profile.encryptedPrivateKey,
-          master_key_salt: profile.masterKeySalt,
-          private_key_nonce: profile.privateKeyNonce,
+          private_key: unwrapKey(profile.encryptedPrivateKey),
           public_key: profile.publicKey,
         },
         error: null,
@@ -74,6 +74,16 @@ export async function dispatchCli(
     case "get-secrets": {
       const vaultId = String(params.vaultId ?? "");
       const environmentId = String(params.environmentId ?? "");
+      // Re-verify the caller is actually a member of this vault (don't trust the
+      // echoed vaultId).
+      const membership = await db.query({
+        vaultMembers: {
+          $: { where: { "vault.id": vaultId, "member.id": profile.id } },
+        },
+      });
+      if ((membership.vaultMembers?.length ?? 0) === 0) {
+        return { data: null, error: { message: "No access to this vault" } };
+      }
       const { secrets } = await db.query({
         secrets: { $: { where: { "vault.id": vaultId, "environment.id": environmentId } } },
       });

@@ -41,9 +41,8 @@ function LoginContent() {
         throw new Error(msg);
       }
 
-      // Hand the token + email to the extension. It fetches its encrypted key
-      // material from /api/extension/me and prompts for the master password in
-      // the popup — the master password never leaves the extension.
+      // Hand the token + email to the extension. It fetches its keys from
+      // /api/extension/me and auto-unlocks (no master password).
       if (callback) {
         const url = new URL(callback);
         url.hash = `token=${encodeURIComponent(data.token)}&email=${encodeURIComponent(data.email)}`;

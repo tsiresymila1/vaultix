@@ -2,15 +2,9 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  deriveMasterKey,
-  encryptPrivateKey,
-  generateSalt,
-  generateUserKeyPair,
-  toBase64,
-} from "@/lib/crypto";
+import { generateUserKeyPair } from "@/lib/crypto";
 import { db } from "@/lib/db";
-import { id } from "@instantdb/react";
+import { api, bearer } from "@/lib/api";
 import { useAuth } from "@/context/auth-context";
 import { Key, Loader2, Shield } from "lucide-react";
 import { motion, AnimatePresence } from "@/components/motion";
@@ -21,14 +15,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
-type Step = "email" | "code" | "setup";
+type Step = "email" | "code";
 
 export default function RegisterPageContent() {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const { setKeys } = useAuth();
   const router = useRouter();
@@ -52,61 +44,34 @@ export default function RegisterPageContent() {
     setLoading(true);
     try {
       await db.auth.signInWithMagicCode({ email, code });
-      // Already set up? Skip to app.
-      const { data } = await db.queryOnce({
-        profiles: { $: { where: { "$user.email": email } } },
-      });
-      const profiles = data.profiles;
-      if (profiles && profiles.length > 0) {
-        toast.info("Account already set up — please log in");
-        router.push("/login");
+      const authUser = await db.getAuth();
+
+      // Already set up? Just load keys and go in.
+      const meRes = await api.account.me.$get(
+        {},
+        { headers: bearer(authUser?.refresh_token) },
+      );
+      const me = meRes.ok ? await meRes.json() : { profile: null };
+      if (me.profile) {
+        setKeys(me.profile.privateKey, me.profile.publicKey);
+        router.push("/vaults");
         return;
       }
-      setStep("setup");
+
+      // Create the identity: generate a keypair; the server wraps the private
+      // key at rest and hands it back on future logins. No master password.
+      const keyPair = await generateUserKeyPair();
+      const res = await api.account.setup.$post(
+        { json: { publicKey: keyPair.publicKey, privateKey: keyPair.privateKey } },
+        { headers: bearer(authUser?.refresh_token) },
+      );
+      if (!res.ok) throw new Error("Could not create your identity — try again.");
+
+      setKeys(keyPair.privateKey, keyPair.publicKey);
+      toast.success("Welcome to Vaultix");
+      router.push("/vaults");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Invalid code");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const setup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-    setLoading(true);
-    try {
-      const authUser = await db.getAuth();
-      if (!authUser) throw new Error("Session expired — verify your email again");
-
-      // Derive master key, generate identity keypair, encrypt private key.
-      const salt = await generateSalt();
-      const masterKey = await deriveMasterKey(password, salt);
-      const keyPair = await generateUserKeyPair();
-      const encrypted = await encryptPrivateKey(keyPair.privateKey, masterKey);
-
-      const profileId = id();
-      await db.transact(
-        db.tx.profiles[profileId]
-          .update({
-            publicKey: keyPair.publicKey,
-            encryptedPrivateKey: encrypted.cipher,
-            privateKeyNonce: encrypted.nonce,
-            masterKeySalt: await toBase64(salt),
-            role: "user",
-            status: "active",
-            createdAt: Date.now(),
-          })
-          .link({ $user: authUser.id }),
-      );
-
-      setKeys(masterKey, keyPair.privateKey);
-      toast.success("Identity created successfully");
-      router.push("/vaults");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -144,96 +109,64 @@ export default function RegisterPageContent() {
               <Key className="w-5 h-5 text-primary" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Create your identity
+              Create your account
             </h1>
             <p className="text-muted-foreground text-sm">
               {step === "email" && "Enter your email to get started"}
               {step === "code" && `Enter the code we sent to ${email}`}
-              {step === "setup" &&
-                "Choose a master password — it encrypts your keys and is never sent to the server"}
             </p>
           </div>
 
           <AnimatePresence mode="wait">
-          <motion.div key={step} variants={fade} initial="hidden" animate="show" exit="exit">
-          {step === "email" && (
-            <form onSubmit={sendCode} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">Email</label>
-                <Input
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send code"}
-              </Button>
-            </form>
-          )}
-
-          {step === "code" && (
-            <form onSubmit={verifyCode} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">Verification code</label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder="123456"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
-              </Button>
-            </form>
-          )}
-
-          {step === "setup" && (
-            <form onSubmit={setup} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">Master password</label>
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
-                  required
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">Confirm master password</label>
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Creating identity...</span>
+            <motion.div key={step} variants={fade} initial="hidden" animate="show" exit="exit">
+              {step === "email" && (
+                <form onSubmit={sendCode} className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium leading-none">Email</label>
+                    <Input
+                      type="email"
+                      placeholder="name@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
+                      required
+                    />
                   </div>
-                ) : (
-                  "Create identity"
-                )}
-              </Button>
-            </form>
-          )}
-          </motion.div>
+                  <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send code"}
+                  </Button>
+                </form>
+              )}
+
+              {step === "code" && (
+                <form onSubmit={verifyCode} className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium leading-none">Verification code</label>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="123456"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
+                    {loading ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Verifying...</span>
+                      </div>
+                    ) : (
+                      "Verify & continue"
+                    )}
+                  </Button>
+                </form>
+              )}
+            </motion.div>
           </AnimatePresence>
 
           <div className="text-center mt-6">

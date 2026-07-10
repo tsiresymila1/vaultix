@@ -11,10 +11,19 @@ const _schema = i.schema({
     // Per-user profile holding zero-knowledge crypto material + app fields.
     // The DB only ever stores ciphertext/nonces + the public key.
     profiles: i.entity({
+      // Identity keypair — server-managed (used for VAULTS / env vars). The
+      // private key is wrapped by the server app key and handed to the client
+      // after magic-code login. The server can decrypt vault content.
       publicKey: i.string(),
       encryptedPrivateKey: i.string(),
-      privateKeyNonce: i.string(),
-      masterKeySalt: i.string(),
+      // Password-manager keypair — ZERO-KNOWLEDGE (like 1Password). The private
+      // key is encrypted with a key derived from the user's master password
+      // (Argon2); the server never sees the master password or this private key.
+      // Optional: set the first time the user unlocks their password vault.
+      pwPublicKey: i.string().optional(),
+      pwEncryptedPrivateKey: i.string().optional(), // secretbox(privkey, masterKey)
+      pwPrivateKeyNonce: i.string().optional(),
+      pwSalt: i.string().optional(), // Argon2 salt for the master password
       fullName: i.string().optional(),
       role: i.string().indexed(), // "admin" | "moderator" | "user"
       status: i.string().indexed(), // "active" | "restricted" | "banned"

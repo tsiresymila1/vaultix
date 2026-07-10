@@ -22,26 +22,11 @@ import { useAuth } from "@/context/auth-context";
 import { db } from "@/lib/db";
 import { api, bearer } from "@/lib/api";
 import {
-  toBase64,
-  fromBase64,
-  deriveMasterKey,
-  encryptSecret,
-  decryptSecret,
-  encryptPrivateKey,
-  decryptPrivateKey,
-  generateUserKeyPair,
-  generateSalt,
-} from "@/lib/crypto";
-import { PasswordEntry } from "@/types";
-import {
   AlertTriangle,
   CheckCircle2,
-  Eye,
-  EyeOff,
   Fingerprint,
   Key,
   Loader2,
-  Lock,
   Mail,
   Shield,
   User,
@@ -49,66 +34,12 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-interface PasswordStrength {
-  valid: boolean;
-  hasLength: boolean;
-  hasUppercase: boolean;
-  hasLowercase: boolean;
-  hasNumber: boolean;
-  hasSpecial: boolean;
-}
-
-function checkPasswordStrength(password: string): PasswordStrength {
-  return {
-    valid:
-      password.length >= 12 &&
-      /[a-z]/.test(password) &&
-      /[A-Z]/.test(password) &&
-      /[0-9]/.test(password) &&
-      /[@$!%*?&]/.test(password),
-    hasLength: password.length >= 12,
-    hasUppercase: /[A-Z]/.test(password),
-    hasLowercase: /[a-z]/.test(password),
-    hasNumber: /[0-9]/.test(password),
-    hasSpecial: /[@$!%*?&]/.test(password),
-  };
-}
-
 export default function ProfilePageContent() {
   const { user, userData, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
 
-  // Live query of the current user's password entries + owned vaults/memberships,
-  // used for re-encryption and data-reset flows.
-  const { data: relData } = db.useQuery(
-    userData
-      ? {
-          passwordEntries: { $: { where: { "owner.id": userData.id } } },
-          vaultMembers: { $: { where: { "member.id": userData.id } } },
-          vaults: { $: { where: { "owner.id": userData.id } } },
-        }
-      : null,
-  );
-
   const [fullName, setFullName] = useState(userData?.fullName || "");
   const [email, setEmail] = useState(user?.email || "");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPasswords, setShowPasswords] = useState({
-    current: false,
-    new: false,
-    confirm: false,
-  });
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({
-    valid: false,
-    hasLength: false,
-    hasUppercase: false,
-    hasLowercase: false,
-    hasNumber: false,
-    hasSpecial: false,
-  });
 
   // Sync local form state from the live profile / auth data.
   useEffect(() => {
@@ -118,10 +49,6 @@ export default function ProfilePageContent() {
   useEffect(() => {
     if (user?.email) setEmail(user.email);
   }, [user]);
-
-  useEffect(() => {
-    setPasswordStrength(checkPasswordStrength(newPassword));
-  }, [newPassword]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,213 +85,8 @@ export default function ProfilePageContent() {
     }
   };
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!user) {
-      toast.error("User not found");
-      return;
-    }
-
-    if (!currentPassword) {
-      toast.error("Please enter your current password");
-      return;
-    }
-
-    if (!newPassword) {
-      toast.error("Please enter a new password");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      toast.error("New passwords do not match");
-      return;
-    }
-
-    const strength = checkPasswordStrength(newPassword);
-    if (!strength.valid) {
-      toast.error("Password does not meet strength requirements");
-      return;
-    }
-
-    setPasswordLoading(true);
-    try {
-      if (!userData) {
-        throw new Error("Profile not loaded");
-      }
-
-      if (!userData.masterKeySalt) {
-        throw new Error("User salt not found");
-      }
-
-      const salt = await fromBase64(userData.masterKeySalt);
-      const oldMasterKey = await deriveMasterKey(currentPassword, salt);
-      const newMasterKey = await deriveMasterKey(newPassword, salt);
-
-      const oldMasterKeyB64 = await toBase64(oldMasterKey);
-      const newMasterKeyB64 = await toBase64(newMasterKey);
-
-      let encryptedPrivateKey = userData.encryptedPrivateKey;
-      let privateKeyNonce = userData.privateKeyNonce;
-
-      if (encryptedPrivateKey && privateKeyNonce) {
-        let decryptedPrivateKey: string;
-        try {
-          // Decrypting the private key with the derived old master key also
-          // verifies that the supplied current password is correct.
-          decryptedPrivateKey = await decryptPrivateKey(
-            encryptedPrivateKey,
-            privateKeyNonce,
-            oldMasterKey,
-          );
-        } catch {
-          throw new Error("Current password is incorrect");
-        }
-        const reEncrypted = await encryptPrivateKey(
-          decryptedPrivateKey,
-          newMasterKey,
-        );
-        encryptedPrivateKey = reEncrypted.cipher;
-        privateKeyNonce = reEncrypted.nonce;
-      }
-
-      const passwordEntries =
-        (relData?.passwordEntries as PasswordEntry[] | undefined) ?? [];
-
-      const txs = [];
-
-      for (const entry of passwordEntries) {
-        const updates: Record<string, unknown> = {};
-
-        if (entry.encryptedPassword && entry.passwordNonce) {
-          try {
-            const decryptedPass = await decryptSecret(
-              entry.encryptedPassword,
-              entry.passwordNonce,
-              oldMasterKeyB64,
-            );
-            const reEncrypted = await encryptSecret(
-              decryptedPass,
-              newMasterKeyB64,
-            );
-            updates.encryptedPassword = reEncrypted.cipher;
-            updates.passwordNonce = reEncrypted.nonce;
-          } catch {
-            console.warn("Could not re-encrypt password entry:", entry.id);
-          }
-        }
-
-        if (entry.encryptedOtpSeed && entry.otpNonce) {
-          try {
-            const decryptedOtp = await decryptSecret(
-              entry.encryptedOtpSeed,
-              entry.otpNonce,
-              oldMasterKeyB64,
-            );
-            const reEncrypted = await encryptSecret(
-              decryptedOtp,
-              newMasterKeyB64,
-            );
-            updates.encryptedOtpSeed = reEncrypted.cipher;
-            updates.otpNonce = reEncrypted.nonce;
-          } catch {
-            console.warn("Could not re-encrypt OTP seed:", entry.id);
-          }
-        }
-
-        if (Object.keys(updates).length > 0) {
-          txs.push(db.tx.passwordEntries[entry.id].update(updates));
-        }
-      }
-
-      txs.push(
-        db.tx.profiles[userData.id].update({
-          encryptedPrivateKey,
-          privateKeyNonce,
-        }),
-      );
-
-      await db.transact(txs);
-
-      // NOTE: the master password is never stored server-side (zero-knowledge);
-      // it only derives the master key, so there is no auth password to update.
-
-      toast.success("Password updated successfully - all data re-encrypted");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (error) {
-      console.error("Error updating password:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to update password";
-      toast.error(message);
-    } finally {
-      setPasswordLoading(false);
-    }
-  };
-
-  const [resetLoading, setResetLoading] = useState(false);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  const handleResetEncryptedData = async () => {
-    if (!user) return;
-
-    setShowResetConfirm(false);
-    setResetLoading(true);
-    try {
-      if (!userData) {
-        throw new Error("Profile not loaded");
-      }
-
-      if (!userData.masterKeySalt) {
-        throw new Error("User salt not found");
-      }
-
-      const keyPair = await generateUserKeyPair();
-      const salt = await fromBase64(userData.masterKeySalt);
-      const masterKey = await deriveMasterKey(
-        newPassword || currentPassword,
-        salt,
-      );
-
-      const encryptedPrivateKey = await encryptPrivateKey(
-        keyPair.privateKey,
-        masterKey,
-      );
-
-      // Delete the user's password entries, memberships, and owned vaults,
-      // then rotate the keypair on the profile. The vault_keys table has been
-      // dropped, so there is nothing to clear there.
-      const ownedPasswordEntries =
-        (relData?.passwordEntries as PasswordEntry[] | undefined) ?? [];
-      const memberships = relData?.vaultMembers ?? [];
-      const ownedVaults = relData?.vaults ?? [];
-
-      const txs = [
-        ...ownedPasswordEntries.map((e) =>
-          db.tx.passwordEntries[e.id].delete(),
-        ),
-        ...memberships.map((m) => db.tx.vaultMembers[m.id].delete()),
-        ...ownedVaults.map((v) => db.tx.vaults[v.id].delete()),
-        db.tx.profiles[userData.id].update({
-          publicKey: keyPair.publicKey,
-          encryptedPrivateKey: encryptedPrivateKey.cipher,
-          privateKeyNonce: encryptedPrivateKey.nonce,
-        }),
-      ];
-
-      await db.transact(txs);
-
-      toast.success("Data reset complete. Please sign out and sign in again.");
-    } catch (error) {
-      console.error("Error resetting data:", error);
-      toast.error("Failed to reset data");
-    } finally {
-      setResetLoading(false);
-    }
-  };
 
   const handleDeleteAccount = async () => {
     setShowDeleteConfirm(false);
@@ -455,7 +177,7 @@ export default function ProfilePageContent() {
               </span>
             </div>
             <p className="text-[11px] text-muted-foreground font-medium">
-              Your account is secured with end-to-end encryption.
+              Your identity keypair secures your vaults and shared passwords.
             </p>
           </Card>
         </div>
@@ -518,235 +240,31 @@ export default function ProfilePageContent() {
           <Card className="rounded-lg border-border bg-card shadow-sm overflow-hidden">
             <CardHeader className="p-6 border-b border-border bg-secondary/10">
               <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <Lock className="h-4 w-4 text-primary" />
-                Security
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                Danger Zone
               </CardTitle>
               <CardDescription className="text-xs">
-                Update your master password
+                Irreversible account actions
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6">
-              <form onSubmit={handleUpdatePassword} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground ml-0.5">
-                    Current Password
-                  </label>
-                  <div className="relative">
-                    <Input
-                      type={showPasswords.current ? "text" : "password"}
-                      placeholder="Enter current password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      className="h-9 rounded-md bg-secondary/20 border-border text-sm font-medium focus:ring-1 focus:ring-primary/50 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowPasswords((prev) => ({
-                          ...prev,
-                          current: !prev.current,
-                        }))
-                      }
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPasswords.current ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground ml-0.5">
-                    New Password
-                  </label>
-                  <div className="relative">
-                    <Input
-                      type={showPasswords.new ? "text" : "password"}
-                      placeholder="Enter new password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="h-9 rounded-md bg-secondary/20 border-border text-sm font-medium focus:ring-1 focus:ring-primary/50 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowPasswords((prev) => ({
-                          ...prev,
-                          new: !prev.new,
-                        }))
-                      }
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPasswords.new ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                  {newPassword && (
-                    <div className="mt-2 p-3 rounded-md bg-secondary/30 border border-border space-y-1.5">
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
-                        Password Strength
-                      </p>
-                      <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-                        <div
-                          className={`flex items-center gap-1 ${passwordStrength.hasLength ? "text-emerald-500" : "text-muted-foreground/50"}`}
-                        >
-                          <span
-                            className={
-                              passwordStrength.hasLength ? "font-bold" : ""
-                            }
-                          >
-                            ●
-                          </span>{" "}
-                          12+ characters
-                        </div>
-                        <div
-                          className={`flex items-center gap-1 ${passwordStrength.hasUppercase ? "text-emerald-500" : "text-muted-foreground/50"}`}
-                        >
-                          <span
-                            className={
-                              passwordStrength.hasUppercase ? "font-bold" : ""
-                            }
-                          >
-                            ●
-                          </span>{" "}
-                          Uppercase
-                        </div>
-                        <div
-                          className={`flex items-center gap-1 ${passwordStrength.hasLowercase ? "text-emerald-500" : "text-muted-foreground/50"}`}
-                        >
-                          <span
-                            className={
-                              passwordStrength.hasLowercase ? "font-bold" : ""
-                            }
-                          >
-                            ●
-                          </span>{" "}
-                          Lowercase
-                        </div>
-                        <div
-                          className={`flex items-center gap-1 ${passwordStrength.hasNumber ? "text-emerald-500" : "text-muted-foreground/50"}`}
-                        >
-                          <span
-                            className={
-                              passwordStrength.hasNumber ? "font-bold" : ""
-                            }
-                          >
-                            ●
-                          </span>{" "}
-                          Number
-                        </div>
-                        <div
-                          className={`flex items-center gap-1 ${passwordStrength.hasSpecial ? "text-emerald-500" : "text-muted-foreground/50"}`}
-                        >
-                          <span
-                            className={
-                              passwordStrength.hasSpecial ? "font-bold" : ""
-                            }
-                          >
-                            ●
-                          </span>{" "}
-                          Special (@$!%*?&)
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground ml-0.5">
-                    Confirm New Password
-                  </label>
-                  <div className="relative">
-                    <Input
-                      type={showPasswords.confirm ? "text" : "password"}
-                      placeholder="Confirm new password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="h-9 rounded-md bg-secondary/20 border-border text-sm font-medium focus:ring-1 focus:ring-primary/50 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowPasswords((prev) => ({
-                          ...prev,
-                          confirm: !prev.confirm,
-                        }))
-                      }
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPasswords.confirm ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                  {confirmPassword && newPassword !== confirmPassword && (
-                    <p className="text-[10px] text-destructive mt-1">
-                      Passwords do not match
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex justify-end border-t border-border pt-6">
-                  <Button
-                    type="submit"
-                    disabled={
-                      passwordLoading ||
-                      !passwordStrength.valid ||
-                      newPassword !== confirmPassword
-                    }
-                    className="rounded-md h-9 px-6 font-semibold shadow-sm"
-                  >
-                    {passwordLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : null}
-                    Update Password
-                  </Button>
-                </div>
-                <div className="mt-4 pt-4 border-t border-destructive/20">
-                  <p className="text-[10px] text-muted-foreground mb-2">
-                    Stuck on unlock screen? Reset your encrypted data to recover
-                    access.
-                  </p>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setShowResetConfirm(true)}
-                    disabled={resetLoading}
-                    className="rounded-md h-8 text-[11px] font-bold uppercase tracking-wider"
-                  >
-                    {resetLoading ? (
-                      <Loader2 className="h-3 w-3 animate-spin mr-2" />
-                    ) : null}
-                    Reset Encrypted Data
-                  </Button>
-                  <p className="text-[10px] text-muted-foreground mt-4 mb-2">
-                    Permanently delete your account and all associated data. This
-                    cannot be undone.
-                  </p>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setShowDeleteConfirm(true)}
-                    disabled={deleteLoading}
-                    className="rounded-md h-8 text-[11px] font-bold uppercase tracking-wider"
-                  >
-                    {deleteLoading ? (
-                      <Loader2 className="h-3 w-3 animate-spin mr-2" />
-                    ) : null}
-                    Delete Account
-                  </Button>
-                </div>
-              </form>
+              <p className="text-[10px] text-muted-foreground mb-2">
+                Permanently delete your account and all associated data. This
+                cannot be undone.
+              </p>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={deleteLoading}
+                className="rounded-md h-8 text-[11px] font-bold uppercase tracking-wider"
+              >
+                {deleteLoading ? (
+                  <Loader2 className="h-3 w-3 animate-spin mr-2" />
+                ) : null}
+                Delete Account
+              </Button>
             </CardContent>
           </Card>
 
@@ -780,61 +298,6 @@ export default function ProfilePageContent() {
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
                   ) : null}
                   Yes, Delete Everything
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-destructive">
-                  <AlertTriangle className="h-5 w-5" />
-                  Reset All Data?
-                </DialogTitle>
-                <DialogDescription>
-                  This will permanently delete:
-                </DialogDescription>
-              </DialogHeader>
-              <div className="py-2 space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-destructive">•</span>
-                  <span>All stored passwords</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-destructive">•</span>
-                  <span>All vaults you own or are member of</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-destructive">•</span>
-                  <span>Your current keypair</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-destructive">•</span>
-                  <span>Access to all shared vaults</span>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                You will need to sign in again after this action.
-              </p>
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowResetConfirm(false)}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={handleResetEncryptedData}
-                  disabled={resetLoading}
-                  className="flex-1"
-                >
-                  {resetLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : null}
-                  Yes, Reset Everything
                 </Button>
               </DialogFooter>
             </DialogContent>

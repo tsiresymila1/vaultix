@@ -33,7 +33,7 @@ import { fade } from "@/lib/motion";
 
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-    const { user, userData, loading, lock, signOut } = useAuth();
+    const { user, userData, loading, signOut } = useAuth();
     const pathname = usePathname();
     const router = useRouter();
 
@@ -281,10 +281,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                                     <span>Settings</span>
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={lock} className="rounded-sm gap-2 text-xs py-2">
-                                    <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <span>Lock</span>
-                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={handleSignOut} className="rounded-sm gap-2 text-xs py-2 text-destructive focus:bg-destructive/10 focus:text-destructive">
                                     <LogOut className="h-3.5 w-3.5" />
                                     <span>Sign Out</span>

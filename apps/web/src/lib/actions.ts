@@ -20,6 +20,18 @@ export async function sendVaultInvitation({
       return { success: false, error: "Unauthorized" };
     }
 
+    // Respect the recipient's notification preference (Settings → Notifications).
+    const { profiles } = await db.query({
+      profiles: { $: { where: { "$user.email": inviteeEmail } } },
+    });
+    const invitee = profiles?.[0];
+    const notifyOptIn =
+      (invitee?.settings as { email_notifications?: boolean } | undefined)
+        ?.email_notifications ?? true;
+    if (!notifyOptIn) {
+      return { success: true, emailed: false, reason: "recipient opted out" };
+    }
+
     const { RESEND_API_KEY } = serverEnv();
     if (!RESEND_API_KEY) {
       // No email provider configured — the membership is still created client-side;

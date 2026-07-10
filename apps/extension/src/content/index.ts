@@ -12,23 +12,6 @@ if (shouldSkipAutofill) {
   console.log('Vaultix: Skipping autofill on', hostname);
 }
 
-// Listen for messages from the web page (for auth flow) - works on all pages
-window.addEventListener('message', async (event) => {
-  if (event.data?.action === 'VAULTIX_AUTH_FROM_PAGE') {
-    console.log('Vaultix: Received auth data from web page, forwarding to background...');
-    // Forward to background script
-    try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'VAULTIX_AUTH_DATA',
-        payload: event.data
-      });
-      console.log('Vaultix: Forwarded to background, response:', response);
-    } catch (err) {
-      console.error('Vaultix: Failed to forward to background:', err);
-    }
-  }
-});
-
 if (shouldSkipAutofill) {
   // Don't run autofill logic on localhost/Vaultix, but keep message listener active
   console.log('Vaultix content script: skipping autofill, message listener active');
@@ -221,7 +204,7 @@ function handleFormSubmit(e: Event) {
     if (username && password) {
       // Send to background to handle save
       chrome.runtime.sendMessage({
-        action: 'OFFER_SAVE_PASSWORD',
+        action: 'SAVE_PASSWORD',
         payload: { username, password, url }
       });
     }

@@ -6,9 +6,9 @@ import { CreateVaultDialog } from "@/components/shared/create-vault-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/context/auth-context";
+import { api, bearer } from "@/lib/api";
 import { encryptVaultKeyForUser, generateVaultKey } from "@/lib/crypto";
 import { db } from "@/lib/db";
-import { id } from "@instantdb/react";
 import { Globe, Plus, Shield, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { Stagger, MotionCard, AnimatePresence } from "@/components/motion";
 
 export default function VaultsPageContent() {
-  const { userData, setVaultKey } = useAuth();
+  const { user, userData, setVaultKey } = useAuth();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [deleteVaultId, setDeleteVaultId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -30,30 +30,39 @@ export default function VaultsPageContent() {
 
   const handleCreateVault = async (name: string) => {
     try {
-      if (!userData) throw new Error("User profile not loaded");
+      // The profile normally comes from the live query, but it can still be
+      // loading right after unlock — fall back to a one-shot fetch so creation
+      // never fails on a race.
+      let profile = userData;
+      if (!profile && user) {
+        const { data: p } = await db.queryOnce({
+          profiles: { $: { where: { "$user.id": user.id } } },
+        });
+        profile = (p.profiles?.[0] as typeof userData) ?? null;
+      }
+      if (!profile) {
+        throw new Error("Profile not ready yet — try again in a moment.");
+      }
 
-      const vaultId = id();
+      // Crypto stays client-side: the server never sees the raw vault key.
       const vaultKey = await generateVaultKey();
       const encryptedVaultKey = await encryptVaultKeyForUser(
         vaultKey,
-        userData.publicKey,
+        profile.publicKey,
       );
-      const memberId = id();
-      const now = Date.now();
 
-      await db.transact([
-        db.tx.vaults[vaultId]
-          .update({ name, createdAt: now })
-          .link({ owner: userData.id }),
-        db.tx.vaultMembers[memberId]
-          .update({ role: "owner", encryptedVaultKey, createdAt: now })
-          .link({ vault: vaultId, member: userData.id }),
-        ...["Development", "Staging", "Production"].map((n) =>
-          db.tx.environments[id()]
-            .update({ name: n, createdAt: now })
-            .link({ vault: vaultId }),
-        ),
-      ]);
+      const authUser = await db.getAuth();
+      const res = await api.vaults.$post(
+        { json: { name, encryptedVaultKey } },
+        { headers: bearer(authUser?.refresh_token) },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: unknown };
+        throw new Error(
+          typeof body.error === "string" ? body.error : "Failed to create vault",
+        );
+      }
+      const { vaultId } = await res.json();
 
       setVaultKey(vaultId, vaultKey);
 
@@ -71,7 +80,17 @@ export default function VaultsPageContent() {
     if (!deleteVaultId) return;
     setDeleting(true);
     try {
-      await db.transact(db.tx.vaults[deleteVaultId].delete());
+      const authUser = await db.getAuth();
+      const res = await api.vaults.$delete(
+        { json: { vaultId: deleteVaultId } },
+        { headers: bearer(authUser?.refresh_token) },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: unknown };
+        throw new Error(
+          typeof body.error === "string" ? body.error : "Failed to delete vault",
+        );
+      }
       toast.success("Vault deleted successfully");
       setDeleteVaultId(null);
     } catch (error) {
@@ -97,6 +116,7 @@ export default function VaultsPageContent() {
           </div>
           <Button
             onClick={() => setCreateDialogOpen(true)}
+            disabled={!userData}
             className="rounded-md h-10 px-6 font-semibold text-muted"
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -194,6 +214,7 @@ export default function VaultsPageContent() {
                 </p>
                 <Button
                   onClick={() => setCreateDialogOpen(true)}
+                  disabled={!userData}
                   variant="outline"
                   className="rounded-md"
                 >

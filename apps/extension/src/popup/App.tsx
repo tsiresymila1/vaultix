@@ -1,23 +1,12 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { Shield, Copy, LogOut, Plus, ExternalLink, Lock } from "lucide-react";
 import {
-  Shield,
-  Unlock,
-  Copy,
-  Eye,
-  EyeOff,
-  LogOut,
-  Plus,
-  ExternalLink,
-} from "lucide-react";
-import {
-  deriveMasterKey,
-  fromBase64,
-  toBase64,
   decryptSecret,
-  decryptPrivateKey,
   decryptVaultKey,
-  initSodium,
+  deriveMasterKey,
+  decryptPrivateKey,
+  fromBase64,
 } from "../shared/crypto";
 import type { PasswordEntry } from "../shared/types";
 import { api, VAULTIX_URL } from "../shared/api";
@@ -32,10 +21,10 @@ const STORAGE_KEYS = {
 interface ExtensionUserData {
   id: string;
   email: string;
-  public_key: string;
-  encrypted_private_key: string;
-  private_key_nonce: string;
-  master_key_salt: string;
+  pw_public_key: string | null;
+  pw_encrypted_private_key: string | null;
+  pw_private_key_nonce: string | null;
+  pw_salt: string | null;
   full_name?: string;
 }
 
@@ -43,12 +32,12 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [authenticating, setAuthenticating] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
-  const [password, setPassword] = useState("");
   const [passwords, setPasswords] = useState<PasswordEntry[]>([]);
   const [search, setSearch] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [userData, setUserData] = useState<ExtensionUserData | null>(null);
+  const [masterPassword, setMasterPassword] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
 
   useEffect(() => {
     initApp();
@@ -73,46 +62,8 @@ export default function App() {
 
     chrome.storage.onChanged.addListener(handleStorageChange);
 
-    // Listen for auth data from web auth flow (only works if popup is open)
-    const handleMessage = async (message: any) => {
-      if (message.action === "VAULTIX_AUTH_DATA") {
-        const {
-          token,
-          email,
-          privateKey,
-          masterKeySalt,
-          encryptedPrivateKey,
-          privateKeyNonce,
-        } = message.data;
-
-        const userData: ExtensionUserData = {
-          id: "",
-          email,
-          public_key: "",
-          encrypted_private_key: encryptedPrivateKey,
-          private_key_nonce: privateKeyNonce,
-          master_key_salt: masterKeySalt,
-        };
-
-        await chrome.storage.local.set({
-          [STORAGE_KEYS.accessToken]: token,
-          [STORAGE_KEYS.userData]: userData,
-          [STORAGE_KEYS.masterKey]: { key: privateKey, privateKey: privateKey },
-          [STORAGE_KEYS.isUnlocked]: true,
-        });
-
-        setUnlocked(true);
-        setUserData(userData);
-        await loadPasswords();
-        toast.success("Vault unlocked via web auth");
-      }
-    };
-
-    chrome.runtime.onMessage.addListener(handleMessage);
-
     return () => {
       chrome.storage.onChanged.removeListener(handleStorageChange);
-      chrome.runtime.onMessage.removeListener(handleMessage);
     };
   }, []);
 
@@ -160,55 +111,14 @@ export default function App() {
 
       console.log("InitApp: No stored auth found");
 
-      // Legacy fallback: auth data handed off via localStorage.
-      const webAuthData = localStorage.getItem("vaultix_extension_auth");
-      if (webAuthData) {
-        const authData = JSON.parse(webAuthData);
-        console.log("InitApp: Processing web auth data", authData.email);
-
-        const userData: ExtensionUserData = {
-          id: "",
-          email: authData.email,
-          public_key: "",
-          encrypted_private_key: authData.encrypted_private_key,
-          private_key_nonce: authData.private_key_nonce,
-          master_key_salt: authData.master_key_salt,
-        };
-
-        await chrome.storage.local.set({
-          [STORAGE_KEYS.accessToken]: authData.token,
-          [STORAGE_KEYS.userData]: userData,
-          [STORAGE_KEYS.masterKey]: {
-            key: authData.private_key,
-            privateKey: authData.private_key,
-          },
-          [STORAGE_KEYS.isUnlocked]: true,
-        });
-
-        // Clear localStorage after processing
-        localStorage.removeItem("vaultix_extension_auth");
-        console.log("InitApp: Saved to chrome.storage, cleared localStorage");
-
-        setUnlocked(true);
-        setUserData(userData);
-        setLoading(false);
-        await loadPasswords();
-        return;
-      }
-
-      // Check for token and private key in URL hash (returned from OAuth flow)
+      // Decoupled auth: the web app hands us only a token (+email) in the URL
+      // hash. Store the token, fetch the user (including the raw private key)
+      // from /me, and auto-unlock immediately — no master password prompt.
       const hashParams = new URLSearchParams(window.location.hash.slice(1));
       const token = hashParams.get("token");
-      const privateKey = hashParams.get("private_key");
       const email = hashParams.get("email");
-      const masterKeySalt = hashParams.get("master_key_salt");
-      const encryptedPrivateKey = hashParams.get("encrypted_private_key");
-      const privateKeyNonce = hashParams.get("private_key_nonce");
 
-      // Decoupled auth: the web app hands us only a token (+email). Fetch the
-      // encrypted key material from /me and unlock locally with the master
-      // password. The master password never leaves the extension.
-      if (token && email && !privateKey) {
+      if (token && email) {
         await chrome.storage.local.set({
           [STORAGE_KEYS.accessToken]: token,
         });
@@ -218,49 +128,18 @@ export default function App() {
         return;
       }
 
-      if (
-        token &&
-        privateKey &&
-        email &&
-        masterKeySalt &&
-        encryptedPrivateKey &&
-        privateKeyNonce
-      ) {
-        const userData: ExtensionUserData = {
-          id: "",
-          email,
-          public_key: "",
-          encrypted_private_key: encryptedPrivateKey,
-          private_key_nonce: privateKeyNonce,
-          master_key_salt: masterKeySalt,
-        };
+      const result = await chrome.storage.local.get([
+        STORAGE_KEYS.accessToken,
+        STORAGE_KEYS.userData,
+        STORAGE_KEYS.isUnlocked,
+      ]);
 
-        await chrome.storage.local.set({
-          [STORAGE_KEYS.accessToken]: token,
-          [STORAGE_KEYS.userData]: userData,
-          [STORAGE_KEYS.masterKey]: { key: privateKey, privateKey: privateKey },
-          [STORAGE_KEYS.isUnlocked]: true,
-        });
-
-        // Clear the hash
-        window.location.hash = "";
+      if (result[STORAGE_KEYS.isUnlocked] && result[STORAGE_KEYS.userData]) {
         setUnlocked(true);
-        setUserData(userData);
+        setUserData(result[STORAGE_KEYS.userData] as ExtensionUserData);
         await loadPasswords();
-      } else {
-        const result = await chrome.storage.local.get([
-          STORAGE_KEYS.accessToken,
-          STORAGE_KEYS.userData,
-          STORAGE_KEYS.isUnlocked,
-        ]);
-
-        if (result[STORAGE_KEYS.isUnlocked] && result[STORAGE_KEYS.userData]) {
-          setUnlocked(true);
-          setUserData(result[STORAGE_KEYS.userData] as ExtensionUserData);
-          await loadPasswords();
-        } else if (result[STORAGE_KEYS.accessToken]) {
-          await fetchUserData(result[STORAGE_KEYS.accessToken]);
-        }
+      } else if (result[STORAGE_KEYS.accessToken]) {
+        await fetchUserData(result[STORAGE_KEYS.accessToken]);
       }
     } catch (err) {
       console.error("Error initializing app:", err);
@@ -287,17 +166,68 @@ export default function App() {
       }
 
       const data = await response.json();
+      const user = data.user as ExtensionUserData;
 
+      // Zero-knowledge: the server only returns the ENCRYPTED password private
+      // key. Persist the user record but stay LOCKED until the master password
+      // is entered (see handleUnlock). If the password vault hasn't been set up
+      // on the web yet, pw_public_key is null and we show a setup message.
       await chrome.storage.local.set({
-        [STORAGE_KEYS.userData]: data.user,
+        [STORAGE_KEYS.userData]: user,
       });
 
-      setUserData(data.user as ExtensionUserData);
+      setUserData(user);
     } catch (err) {
       console.error("Error fetching user data:", err);
       setError("Failed to connect to Vaultix. Please sign in again.");
     } finally {
       setAuthenticating(false);
+    }
+  };
+
+  // Master-password unlock: derive the master key from the password + the
+  // user's pw_salt, use it to decrypt the password private key, and stash the
+  // resulting pwPrivateKey as the per-session unlock material that both the
+  // popup and the background service worker read to unseal entry keys.
+  const handleUnlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userData) return;
+    if (
+      !userData.pw_salt ||
+      !userData.pw_encrypted_private_key ||
+      !userData.pw_private_key_nonce
+    ) {
+      setError("Set up your password vault on the web app first");
+      return;
+    }
+
+    setError("");
+    setUnlocking(true);
+    try {
+      const masterKey = await deriveMasterKey(
+        masterPassword,
+        await fromBase64(userData.pw_salt),
+      );
+      // Wrong password → this throws (auth tag mismatch).
+      const pwPrivateKey = await decryptPrivateKey(
+        userData.pw_encrypted_private_key,
+        userData.pw_private_key_nonce,
+        masterKey,
+      );
+
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.masterKey]: { privateKey: pwPrivateKey },
+        [STORAGE_KEYS.isUnlocked]: true,
+      });
+
+      setMasterPassword("");
+      setUnlocked(true);
+      await loadPasswords();
+      toast.success("Vault unlocked");
+    } catch {
+      setError("Incorrect master password");
+    } finally {
+      setUnlocking(false);
     }
   };
 
@@ -342,60 +272,6 @@ export default function App() {
     }
   };
 
-  const handleUnlock = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setAuthenticating(true);
-
-    try {
-      await initSodium();
-
-      if (!userData?.master_key_salt) {
-        setError("No user data found. Please sign in first.");
-        setAuthenticating(false);
-        return;
-      }
-
-      const salt = await fromBase64(userData.master_key_salt);
-      const masterKey = await deriveMasterKey(password, salt);
-      const masterKeyB64 = await toBase64(masterKey);
-
-      const decryptedPrivateKey = await decryptPrivateKey(
-        userData.encrypted_private_key,
-        userData.private_key_nonce,
-        masterKey,
-      );
-
-      await chrome.storage.local.set({
-        [STORAGE_KEYS.masterKey]: {
-          key: masterKeyB64,
-          privateKey: decryptedPrivateKey,
-        },
-        [STORAGE_KEYS.isUnlocked]: true,
-      });
-
-      setUnlocked(true);
-      setPassword("");
-      await loadPasswords();
-      toast.success("Vault unlocked");
-    } catch (err) {
-      console.error("Unlock error:", err);
-      setError(err instanceof Error ? err.message : "Invalid password");
-    } finally {
-      setAuthenticating(false);
-    }
-  };
-
-  const handleLock = async () => {
-    await chrome.storage.local.remove([
-      STORAGE_KEYS.masterKey,
-      STORAGE_KEYS.isUnlocked,
-    ]);
-    setUnlocked(false);
-    setPasswords([]);
-    toast.success("Vault locked");
-  };
-
   const handleSignOut = async () => {
     await chrome.storage.local.remove([
       STORAGE_KEYS.masterKey,
@@ -406,6 +282,8 @@ export default function App() {
     setUnlocked(false);
     setUserData(null);
     setPasswords([]);
+    setMasterPassword("");
+    setError("");
     toast.success("Signed out");
   };
 
@@ -417,7 +295,7 @@ export default function App() {
       ]);
       const keyStore = store[STORAGE_KEYS.masterKey];
       const ud = store[STORAGE_KEYS.userData] as ExtensionUserData | undefined;
-      if (!keyStore?.privateKey || !ud?.public_key) {
+      if (!keyStore?.privateKey || !ud?.pw_public_key) {
         toast.error("Vault is locked");
         return;
       }
@@ -425,7 +303,7 @@ export default function App() {
       // Envelope: unseal the entry key with our keypair, then decrypt.
       const entryKey = await decryptVaultKey(
         entry.sealed_key,
-        ud.public_key,
+        ud.pw_public_key,
         keyStore.privateKey,
       );
       const decrypted = await decryptSecret(
@@ -483,89 +361,79 @@ export default function App() {
         </div>
       </div>
 
-      {!userData ? (
+      {!unlocked ? (
         <div className="unlock-form">
           {error && <div className="error-message">{error}</div>}
 
-          <div className="empty-state" style={{ padding: "20px 0" }}>
-            <p
-              style={{
-                marginBottom: "16px",
-                fontSize: "13px",
-                color: "#94a3b8",
-              }}
-            >
-              Sign in with your Vaultix account to access your passwords
-            </p>
-            <button className="btn-primary" onClick={handleOAuthLogin}>
-              <ExternalLink size={16} />
-              Sign In with Vaultix
-            </button>
-          </div>
-        </div>
-      ) : !unlocked ? (
-        <form className="unlock-form" onSubmit={handleUnlock}>
-          {error && <div className="error-message">{error}</div>}
-
-          <div className="form-group">
-            <label>Master Password</label>
-            <div style={{ position: "relative" }}>
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your master password"
-                style={{ paddingRight: "40px", width: "100%" }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
+          {!userData ? (
+            // Not signed in yet — start the OAuth flow.
+            <div className="empty-state" style={{ padding: "20px 0" }}>
+              <p
                 style={{
-                  position: "absolute",
-                  right: "10px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "none",
-                  border: "none",
+                  marginBottom: "16px",
+                  fontSize: "13px",
                   color: "#94a3b8",
-                  cursor: "pointer",
                 }}
               >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                Sign in with your Vaultix account to access your passwords
+              </p>
+              <button className="btn-primary" onClick={handleOAuthLogin}>
+                <ExternalLink size={16} />
+                Sign In with Vaultix
               </button>
             </div>
-          </div>
-
-          <button
-            type="submit"
-            className="btn-primary"
-            disabled={authenticating || !password}
-          >
-            {authenticating ? (
-              <div className="spinner" />
-            ) : (
-              <>
-                <Unlock size={16} /> Unlock
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSignOut}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "#64748b",
-              fontSize: "12px",
-              cursor: "pointer",
-              marginTop: "8px",
-              width: "100%",
-            }}
-          >
-            Sign out and use different account
-          </button>
-        </form>
+          ) : !userData.pw_public_key ? (
+            // Signed in, but the password vault hasn't been created on the web.
+            <div className="empty-state" style={{ padding: "20px 0" }}>
+              <p
+                style={{
+                  marginBottom: "16px",
+                  fontSize: "13px",
+                  color: "#94a3b8",
+                }}
+              >
+                Set up your password vault on the web app first
+              </p>
+              <button
+                className="btn-primary"
+                onClick={() => window.open(`${VAULTIX_URL}/passwords`, "_blank")}
+              >
+                <ExternalLink size={16} />
+                Open Vaultix
+              </button>
+            </div>
+          ) : (
+            // Signed in with a password vault — ask for the master password.
+            <form onSubmit={handleUnlock}>
+              <p
+                style={{
+                  marginBottom: "12px",
+                  fontSize: "13px",
+                  color: "#94a3b8",
+                }}
+              >
+                Enter your master password to unlock your vault
+              </p>
+              <input
+                type="password"
+                className="search-input"
+                placeholder="Master password"
+                value={masterPassword}
+                autoFocus
+                onChange={(e) => setMasterPassword(e.target.value)}
+                style={{ marginBottom: "12px" }}
+              />
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={unlocking || !masterPassword}
+              >
+                <Lock size={16} />
+                {unlocking ? "Unlocking..." : "Unlock"}
+              </button>
+            </form>
+          )}
+        </div>
       ) : (
         <div className="password-list">
           <input
@@ -607,12 +475,12 @@ export default function App() {
 
       {unlocked && (
         <div className="footer">
-          <button onClick={handleLock}>
+          <button onClick={handleSignOut}>
             <LogOut
               size={14}
               style={{ marginRight: "4px", verticalAlign: "middle" }}
             />
-            Lock
+            Sign out
           </button>
           <button
             onClick={() => window.open(`${VAULTIX_URL}/passwords`, "_blank")}

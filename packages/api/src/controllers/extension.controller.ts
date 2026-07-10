@@ -28,10 +28,12 @@ export const me = factory.createHandlers(
       user: {
         id: user.id,
         email: user.email,
-        public_key: profile.publicKey,
-        encrypted_private_key: profile.encryptedPrivateKey,
-        private_key_nonce: profile.privateKeyNonce,
-        master_key_salt: profile.masterKeySalt,
+        // Password-vault keypair (zero-knowledge): the extension derives the
+        // master key from the user's master password to decrypt pw_private_key.
+        pw_public_key: profile.pwPublicKey ?? null,
+        pw_encrypted_private_key: profile.pwEncryptedPrivateKey ?? null,
+        pw_private_key_nonce: profile.pwPrivateKeyNonce ?? null,
+        pw_salt: profile.pwSalt ?? null,
         full_name: profile.fullName ?? null,
       },
     });

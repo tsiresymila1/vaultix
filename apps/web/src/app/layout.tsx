@@ -14,12 +14,11 @@ const outfit = Outfit({
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Vaultix — Zero-Knowledge Secret Manager",
-  description: "Secure, client-side encrypted secret manager.",
+  title: "Vaultix — Secret & Password Manager",
+  description: "Encrypted secret and password manager for teams — CLI injection, browser autofill, role-based sharing.",
 };
 
 import ProgressBarProvider from "@/components/shared/progress-bar-provider";
-import { VaultUnlock } from "@/components/shared/vault-unlock";
 import { MotionProvider } from "@/components/motion";
 
 export default function RootLayout({
@@ -36,7 +35,6 @@ export default function RootLayout({
           <MotionProvider>
             <ProgressBarProvider>
               <ThemeSynchronizer />
-              <VaultUnlock />
               {children}
               <Toaster position="top-right" />
             </ProgressBarProvider>

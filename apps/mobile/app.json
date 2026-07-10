@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Vaultix",
+    "slug": "vaultix",
+    "scheme": "vaultix",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "backgroundColor": "#1c1c1c",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vaultix.app"
+    },
+    "android": {
+      "package": "com.vaultix.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#1c1c1c"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

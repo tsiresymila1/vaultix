@@ -1,8 +1,14 @@
 // Background Service Worker for Vaultix Chrome Extension
 
-import { decryptSecret, decryptVaultKey } from "../shared/crypto";
+import {
+  decryptSecret,
+  decryptVaultKey,
+  generateVaultKey,
+  encryptSecret,
+  encryptVaultKeyForUser,
+} from "../shared/crypto";
 import type { PasswordEntry, UserData } from "../shared/types";
-import { api } from "../shared/api";
+import { api, bearer } from "../shared/api";
 
 const STORAGE_KEYS = {
   masterKey: 'vaultix_master_key',
@@ -39,59 +45,13 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
 
     case 'DETECT_LOGIN':
       return await detectLoginForm(message.tabId!);
-      
-    case 'FILL_PASSWORD':
-      return await fillPassword(message.payload as { entryId: string; tabId: number });
-      
+
     case 'SAVE_PASSWORD':
       return await savePassword(message.payload as { username: string; password: string; url: string });
-      
-    case 'VAULTIX_AUTH_DATA':
-      // Store auth data from web auth flow
-      return await handleWebAuthData(message.payload as any);
-      
+
     default:
       return { error: 'Unknown action' };
   }
-}
-
-async function handleWebAuthData(data: any) {
-  console.log('Background: Received auth data', data);
-  
-  // Extract the actual auth data (could be nested in payload or at top level)
-  const authData = data.token ? data : (data.payload || data);
-  const { token, email, privateKey, masterKeySalt, encryptedPrivateKey, privateKeyNonce } = authData;
-  
-  console.log('Background: Processing auth for', email);
-  const userData = {
-    id: '',
-    email: email,
-    public_key: '',
-    encrypted_private_key: encryptedPrivateKey,
-    private_key_nonce: privateKeyNonce,
-    master_key_salt: masterKeySalt
-  };
-
-  await chrome.storage.local.set({
-    [STORAGE_KEYS.accessToken]: token,
-    [STORAGE_KEYS.userData]: userData,
-    [STORAGE_KEYS.masterKey]: { key: privateKey, privateKey: privateKey },
-    [STORAGE_KEYS.isUnlocked]: true
-  });
-  
-  console.log('Background: Auth data stored in chrome.storage');
-
-  // Notify popup if it's open
-  try {
-    const views = chrome.extension.getViews({ type: 'popup' });
-    if (views.length > 0) {
-      views[0].postMessage({ action: 'VAULTIX_AUTH_DATA_RECEIVED' }, '*');
-    }
-  } catch (e) {
-    console.log('Could not notify popup');
-  }
-
-  return { success: true };
 }
 
 async function getUnlockStatus() {
@@ -143,14 +103,14 @@ async function getDecryptedPassword(payload: { entryId: string }) {
     ]);
     const keyStore = store[STORAGE_KEYS.masterKey] as { privateKey?: string } | undefined;
     const ud = store[STORAGE_KEYS.userData] as UserData | undefined;
-    if (!keyStore?.privateKey || !ud?.public_key) {
+    if (!keyStore?.privateKey || !ud?.pw_public_key) {
       return { error: "locked" };
     }
     const all = await fetchPasswords();
     const entry = all.find((p) => p.id === payload.entryId);
     if (!entry) return { error: "not found" };
 
-    const entryKey = await decryptVaultKey(entry.sealed_key, ud.public_key, keyStore.privateKey);
+    const entryKey = await decryptVaultKey(entry.sealed_key, ud.pw_public_key, keyStore.privateKey);
     const password = await decryptSecret(entry.encrypted_password, entry.password_nonce, entryKey);
     return { password };
   } catch {
@@ -174,16 +134,66 @@ async function detectLoginForm(tabId: number) {
   }
 }
 
-async function fillPassword(payload: { entryId: string; tabId: number }) {
-  // Implementation for filling password
-  // Would need to get decrypted password and fill the form
-  return { success: true };
-}
-
+// Envelope save: generate a fresh per-entry key, encrypt the password with it,
+// seal that key to the user's own public key, and POST only ciphertext + sealed
+// key to the API. Plaintext and keys never leave the extension.
 async function savePassword(payload: { username: string; password: string; url: string }) {
-  // Implementation for saving new password
-  // This would encrypt and save to Supabase
-  return { success: true };
+  try {
+    const store = await chrome.storage.local.get([
+      STORAGE_KEYS.masterKey,
+      STORAGE_KEYS.userData,
+      STORAGE_KEYS.accessToken,
+    ]);
+    const keyStore = store[STORAGE_KEYS.masterKey] as { privateKey?: string } | undefined;
+    const ud = store[STORAGE_KEYS.userData] as UserData | undefined;
+    const token = store[STORAGE_KEYS.accessToken] as string | undefined;
+
+    // Requires an unlocked vault: decrypted private key + the user's password
+    // public key (which only exists once the vault is set up on the web app).
+    if (!keyStore?.privateKey || !token) {
+      return { error: "locked" };
+    }
+    if (!ud?.pw_public_key) {
+      return { error: "password vault not set up" };
+    }
+
+    const { username, password, url } = payload;
+
+    // Derive a human-friendly title from the URL hostname.
+    let title = url;
+    try {
+      title = new URL(url).hostname;
+    } catch {
+      // keep the raw url as the title if it can't be parsed
+    }
+
+    // (b) fresh per-entry key, (c) encrypt password with it,
+    // (d) seal the entry key to the user's own public key.
+    const entryKey = await generateVaultKey();
+    const { cipher: encryptedPassword, nonce: passwordNonce } = await encryptSecret(password, entryKey);
+    const ownerEncryptedKey = await encryptVaultKeyForUser(entryKey, ud.pw_public_key);
+
+    // (e) POST only ciphertext + sealed key.
+    const res = await api.passwords.$post(
+      {
+        json: {
+          title,
+          websiteUrl: url,
+          username,
+          encryptedPassword,
+          passwordNonce,
+          ownerEncryptedKey,
+        },
+      },
+      { headers: bearer(token) },
+    );
+
+    if (!res.ok) return { error: "save failed" };
+    const data = await res.json();
+    return { success: true, entryId: data.entryId };
+  } catch {
+    return { error: "save failed" };
+  }
 }
 
 // Function to detect login forms - runs in page context

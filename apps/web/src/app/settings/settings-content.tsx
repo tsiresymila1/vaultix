@@ -210,7 +210,7 @@ export default function SettingsPageContent() {
                         <div>
                             <p className="font-bold text-sm">Infrastructure</p>
                             <p className="text-xs text-muted-foreground leading-relaxed mt-1">
-                                Connected to InstantDB. End-to-end encryption active via Libsodium WASM.
+                                Connected to InstantDB. Content encrypted with Libsodium (XChaCha20-Poly1305).
                             </p>
                         </div>
                         <Button asChild variant="link" className="p-0 h-auto self-start mt-4 gap-1 text-primary hover:no-underline text-xs font-bold uppercase tracking-widest group/btn">
@@ -242,7 +242,7 @@ export default function SettingsPageContent() {
                 open={purgeDialogOpen}
                 onOpenChange={setPurgeDialogOpen}
                 title="Purge Local Cache?"
-                description="This will warn remove all encryption keys stored in your browser. You will need to re-login with your Master Password to access your vaults. This action cannot be undone."
+                description="This removes the encryption keys cached in your browser. You'll be signed out and your keys reload automatically the next time you sign in."
                 confirmText="Purge & Logout"
                 variant="destructive"
                 onConfirm={handlePurgeCache}

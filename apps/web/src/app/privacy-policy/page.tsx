@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
                     <section className="space-y-4">
                         <h2 className="text-xl font-semibold border-b border-border pb-2">1. Overview</h2>
                         <p className="text-muted-foreground">
-                            Vaultix is designed with a &quot;Zero-Knowledge&quot; architecture. This means your secrets, passwords, and notes are encrypted on your device <strong>before</strong> they are sent to our servers. We never have access to your master password or your unencrypted data.
+                            Your data is always encrypted at rest. <strong>Vaults</strong> (environment variables) are server-managed: their keys are protected by a server application key, so we technically can decrypt vault content (we don't access it in normal operation) — this enables passwordless login and CLI/CI use. Your <strong>password manager</strong> is <strong>zero-knowledge</strong>: it is protected by a master password that never leaves your device, so we can never decrypt your passwords.
                         </p>
                     </section>
 
@@ -40,16 +40,18 @@ export default function PrivacyPolicyPage() {
                             Our security model relies on the follow technologies:
                         </p>
                         <ul className="list-disc pl-6 text-muted-foreground space-y-2">
-                            <li><strong>Argon2id:</strong> For secure master key derivation.</li>
-                            <li><strong>XChaCha20-Poly1305:</strong> For authenticated encryption of all stored secrets.</li>
-                            <li><strong>Ed25519/Curve25519:</strong> For identity verification and secure sharing.</li>
+                            <li><strong>Email magic code:</strong> Passwordless login — no login passwords stored.</li>
+                            <li><strong>XChaCha20-Poly1305:</strong> Authenticated encryption of all stored content.</li>
+                            <li><strong>Curve25519:</strong> Identity + password keys used to share keys between members.</li>
+                            <li><strong>Argon2id:</strong> Derives your password-vault master key locally (never sent to us).</li>
+                            <li><strong>AES-256-GCM:</strong> Server-side wrapping of identity private keys at rest.</li>
                         </ul>
                     </section>
 
                     <section className="space-y-4">
                         <h2 className="text-xl font-semibold border-b border-border pb-2">4. Your Rights</h2>
                         <p className="text-muted-foreground">
-                            You have the right to access, export, or delete your data at any time. Because your data is encrypted with a key only you hold, if you lose your master password, we cannot recover your data.
+                            You have the right to access, export, or delete your data at any time. Deleting your account permanently removes your encrypted data and identity keys.
                         </p>
                     </section>
 

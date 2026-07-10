@@ -5,21 +5,28 @@ import { AddSecretDialog } from "@/components/shared/add-secret-dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { ImportEnvDialog } from "@/components/shared/import-env-dialog";
 import { ShareSecretDialog } from "@/components/shared/share-secret-dialog";
-import { UnlockVaultDialog } from "@/components/shared/unlock-vault-dialog";
 import { VaultMembersDialog } from "@/components/shared/vault-members-dialog";
 import { VaultSettingsDialog } from "@/components/shared/vault-settings-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/context/auth-context";
+import { api, bearer } from "@/lib/api";
 import {
     decryptSecret,
     decryptVaultKeyWithPrivateKey,
     encryptSecret
 } from "@/lib/crypto";
 import { db } from "@/lib/db";
-import { id as newId } from "@instantdb/react";
 import { cn } from "@/lib/utils";
 import {
     Activity,
@@ -46,6 +53,13 @@ import { Secret } from "@/types";
 
 interface VaultDetailContentProps {
     params: { id: string };
+}
+
+/** Extract a human-readable error from an API JSON body (the zValidator 400
+ *  error can be a ZodError object, so only trust string `error` fields). */
+async function apiError(res: Response, fallback: string): Promise<string> {
+    const body = (await res.json().catch(() => ({}))) as { error?: unknown };
+    return typeof body.error === "string" ? body.error : fallback;
 }
 
 export default function VaultDetailContent({
@@ -80,6 +94,9 @@ export default function VaultDetailContent({
         return vault?.members?.find((m) => m.member?.id === userData.id) ?? null;
     }, [vault, userData]);
     const userRole = memberData?.role ?? null;
+    // Only managers may mutate secrets/environments; a plain "member" is read-only.
+    const isManager =
+        userRole === "owner" || userRole === "admin" || userRole === "moderator";
 
     const vaultKey = vaultKeys[id] || null;
     const [loading, setLoading] = useState(false);
@@ -95,7 +112,6 @@ export default function VaultDetailContent({
     const [deletingSecret, setDeletingSecret] = useState(false);
     const [deletingVault, setDeletingVault] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
-    const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
     const [shareDialogOpen, setShareDialogOpen] = useState(false);
     const [secretsToShare, setSecretsToShare] = useState<Secret[] | null>(null);
     const [selectedSecrets, setSelectedSecrets] = useState<Set<string>>(new Set());
@@ -104,6 +120,13 @@ export default function VaultDetailContent({
     const [editKey, setEditKey] = useState("");
     const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
     const [derivingKey, setDerivingKey] = useState(false);
+    const [editEnvId, setEditEnvId] = useState("");
+    const [envDialogOpen, setEnvDialogOpen] = useState(false);
+    const [envDialogMode, setEnvDialogMode] = useState<"create" | "rename">("create");
+    const [envNameInput, setEnvNameInput] = useState("");
+    const [envSaving, setEnvSaving] = useState(false);
+    const [deleteEnvId, setDeleteEnvId] = useState<string | null>(null);
+    const [deletingEnv, setDeletingEnv] = useState(false);
 
     const router = useRouter();
 
@@ -136,7 +159,7 @@ export default function VaultDetailContent({
                 setVaultKey(id, decryptedVK);
             } catch (error) {
                 console.error("Decryption error:", error);
-                toast.error("Failed to decrypt vault key. Check your master key.");
+                toast.error("Failed to load vault key.");
             } finally {
                 setDerivingKey(false);
             }
@@ -150,17 +173,26 @@ export default function VaultDetailContent({
 
         try {
             if (!vaultKey) {
-                setUnlockDialogOpen(true);
+                // vault key still loading; the throw below informs the user
                 throw new Error("Vault session is locked. Please unlock it first.");
             }
 
             const { cipher, nonce } = await encryptSecret(value, vaultKey);
 
-            await db.transact(
-                db.tx.secrets[newId()]
-                    .update({ key, encryptedPayload: cipher, nonce, createdAt: Date.now() })
-                    .link({ vault: id, environment: activeEnv })
+            const authUser = await db.getAuth();
+            const res = await api.vaults.secrets.$post(
+                {
+                    json: {
+                        vaultId: id,
+                        environmentId: activeEnv,
+                        key,
+                        encryptedPayload: cipher,
+                        nonce,
+                    },
+                },
+                { headers: bearer(authUser?.refresh_token) },
             );
+            if (!res.ok) throw new Error(await apiError(res, "Failed to add secret"));
 
             toast.success("Secret added successfully");
         } catch (error) {
@@ -175,30 +207,31 @@ export default function VaultDetailContent({
 
         try {
             if (!vaultKey) {
-                setUnlockDialogOpen(true);
+                // vault key still loading; the throw below informs the user
                 throw new Error("Vault session is locked. Please unlock it first.");
             }
 
-            const ops = [];
+            const payload: Array<{ key: string; encryptedPayload: string; nonce: string }> = [];
             for (const entry of entries) {
                 const key = entry.key.trim();
-                const value = entry.value;
                 if (!key) continue;
-
-                const { cipher, nonce } = await encryptSecret(value, vaultKey);
-                ops.push(
-                    db.tx.secrets[newId()]
-                        .update({ key, encryptedPayload: cipher, nonce, createdAt: Date.now() })
-                        .link({ vault: id, environment: activeEnv })
-                );
+                const { cipher, nonce } = await encryptSecret(entry.value, vaultKey);
+                payload.push({ key, encryptedPayload: cipher, nonce });
             }
 
-            if (ops.length > 0) {
-                await db.transact(ops);
-                toast.success(`Imported ${ops.length} secret(s)`);
-            } else {
+            if (payload.length === 0) {
                 toast.message("No secrets imported");
+                return;
             }
+
+            const authUser = await db.getAuth();
+            const res = await api.vaults.secrets.import.$post(
+                { json: { vaultId: id, environmentId: activeEnv, secrets: payload } },
+                { headers: bearer(authUser?.refresh_token) },
+            );
+            if (!res.ok) throw new Error(await apiError(res, "Failed to import .env"));
+            const { count } = await res.json();
+            toast.success(`Imported ${count} secret(s)`);
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to import .env";
             toast.error(message);
@@ -211,7 +244,12 @@ export default function VaultDetailContent({
 
         setDeletingSecret(true);
         try {
-            await db.transact(db.tx.secrets[deleteSecretId].delete());
+            const authUser = await db.getAuth();
+            const res = await api.vaults.secrets.$delete(
+                { json: { vaultId: id, secretIds: [deleteSecretId] } },
+                { headers: bearer(authUser?.refresh_token) },
+            );
+            if (!res.ok) throw new Error(await apiError(res, "Failed to delete secret"));
 
             toast.success("Secret deleted");
             setDeleteSecretId(null);
@@ -242,7 +280,12 @@ export default function VaultDetailContent({
 
     const handleUpdateVaultName = async (newName: string) => {
         try {
-            await db.transact(db.tx.vaults[id].update({ name: newName }));
+            const authUser = await db.getAuth();
+            const res = await api.vaults.$patch(
+                { json: { vaultId: id, name: newName } },
+                { headers: bearer(authUser?.refresh_token) },
+            );
+            if (!res.ok) throw new Error("rename failed");
             toast.success("Vault name updated");
         } catch (error) {
             toast.error("Failed to update vault name");
@@ -253,7 +296,12 @@ export default function VaultDetailContent({
     const handleDeleteVault = async () => {
         setDeletingVault(true);
         try {
-            await db.transact(db.tx.vaults[id].delete());
+            const authUser = await db.getAuth();
+            const res = await api.vaults.$delete(
+                { json: { vaultId: id } },
+                { headers: bearer(authUser?.refresh_token) },
+            );
+            if (!res.ok) throw new Error("delete failed");
             toast.success("Vault deleted");
             router.push("/vaults");
         } catch {
@@ -290,13 +338,20 @@ export default function VaultDetailContent({
         setLoading(true);
         try {
             const idsToDelete = Array.from(selectedSecrets);
-            await db.transact(idsToDelete.map((sid) => db.tx.secrets[sid].delete()));
+            const authUser = await db.getAuth();
+            const res = await api.vaults.secrets.$delete(
+                { json: { vaultId: id, secretIds: idsToDelete } },
+                { headers: bearer(authUser?.refresh_token) },
+            );
+            if (!res.ok) throw new Error(await apiError(res, "Failed to delete secrets"));
+            const { deleted } = await res.json();
 
             setSelectedSecrets(new Set());
-            toast.success(`Deleted ${idsToDelete.length} secret(s)`);
+            toast.success(`Deleted ${deleted} secret(s)`);
             setBulkDeleteConfirmOpen(false);
         } catch (error) {
-            toast.error("Failed to delete secrets");
+            const message = error instanceof Error ? error.message : "Failed to delete secrets";
+            toast.error(message);
         } finally {
             setLoading(false);
         }
@@ -307,17 +362,96 @@ export default function VaultDetailContent({
         try {
             setLoading(true);
             const { cipher, nonce } = await encryptSecret(editValue, vaultKey);
-            await db.transact(
-                db.tx.secrets[secretId].update({ key: editKey, encryptedPayload: cipher, nonce })
+            const currentEnvId = secrets.find((s) => s.id === secretId)?.environment?.id;
+            const moving = !!editEnvId && editEnvId !== currentEnvId;
+
+            const authUser = await db.getAuth();
+            const res = await api.vaults.secrets.$patch(
+                {
+                    json: {
+                        secretId,
+                        key: editKey,
+                        encryptedPayload: cipher,
+                        nonce,
+                        // Only send environmentId when actually moving the secret.
+                        ...(moving ? { environmentId: editEnvId } : {}),
+                    },
+                },
+                { headers: bearer(authUser?.refresh_token) },
             );
+            if (!res.ok) throw new Error(await apiError(res, "Failed to update secret"));
 
             setDecryptedSecrets({ ...decryptedSecrets, [secretId]: editValue });
             setEditingSecretId(null);
-            toast.success("Secret updated");
+            toast.success(moving ? "Secret updated and moved" : "Secret updated");
         } catch (error) {
-            toast.error("Failed to update secret");
+            const message = error instanceof Error ? error.message : "Failed to update secret";
+            toast.error(message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // --- Environment management (manager-only) ---
+    const handleSaveEnv = async () => {
+        const name = envNameInput.trim();
+        if (!name) return;
+        setEnvSaving(true);
+        try {
+            const authUser = await db.getAuth();
+            if (envDialogMode === "create") {
+                const res = await api.vaults.environments.$post(
+                    { json: { vaultId: id, name } },
+                    { headers: bearer(authUser?.refresh_token) },
+                );
+                if (!res.ok) throw new Error(await apiError(res, "Failed to create environment"));
+                const { environmentId } = await res.json();
+                setActiveEnv(environmentId);
+                toast.success("Environment created");
+            } else {
+                if (!activeEnv) return;
+                const res = await api.vaults.environments.$patch(
+                    { json: { environmentId: activeEnv, name } },
+                    { headers: bearer(authUser?.refresh_token) },
+                );
+                if (!res.ok) throw new Error(await apiError(res, "Failed to rename environment"));
+                toast.success("Environment renamed");
+            }
+            setEnvDialogOpen(false);
+            setEnvNameInput("");
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to save environment";
+            toast.error(message);
+        } finally {
+            setEnvSaving(false);
+        }
+    };
+
+    const handleDeleteEnv = async () => {
+        if (!deleteEnvId) return;
+        setDeletingEnv(true);
+        try {
+            const authUser = await db.getAuth();
+            const res = await api.vaults.environments.$delete(
+                { json: { environmentId: deleteEnvId } },
+                { headers: bearer(authUser?.refresh_token) },
+            );
+            if (!res.ok) throw new Error(await apiError(res, "Failed to delete environment"));
+            const { deletedSecrets } = await res.json();
+            if (activeEnv === deleteEnvId) {
+                setActiveEnv(environments.find((e) => e.id !== deleteEnvId)?.id ?? null);
+            }
+            setDeleteEnvId(null);
+            toast.success(
+                deletedSecrets > 0
+                    ? `Environment deleted (${deletedSecrets} secret(s) removed)`
+                    : "Environment deleted",
+            );
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to delete environment";
+            toast.error(message);
+        } finally {
+            setDeletingEnv(false);
         }
     };
 
@@ -426,17 +560,64 @@ export default function VaultDetailContent({
                 <div className="space-y-6">
                     <Tabs value={activeEnv || ""} onValueChange={setActiveEnv} className="w-full">
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
-                            <TabsList className="bg-secondary rounded-md h-10 p-1">
-                                {environments.map((env) => (
-                                    <TabsTrigger
-                                        key={env.id}
-                                        value={env.id}
-                                        className="rounded-sm px-4 h-full data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-xs font-semibold"
-                                    >
-                                        {env.name}
-                                    </TabsTrigger>
-                                ))}
-                            </TabsList>
+                            <div className="flex items-center gap-2">
+                                <TabsList className="bg-secondary rounded-md h-10 p-1">
+                                    {environments.map((env) => (
+                                        <TabsTrigger
+                                            key={env.id}
+                                            value={env.id}
+                                            className="rounded-sm px-4 h-full data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-xs font-semibold"
+                                        >
+                                            {env.name}
+                                        </TabsTrigger>
+                                    ))}
+                                </TabsList>
+                                {isManager && (
+                                    <div className="flex items-center gap-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            title="New environment"
+                                            onClick={() => {
+                                                setEnvDialogMode("create");
+                                                setEnvNameInput("");
+                                                setEnvDialogOpen(true);
+                                            }}
+                                            className="h-9 w-9 rounded-md text-muted-foreground hover:text-foreground"
+                                        >
+                                            <Plus className="h-3.5 w-3.5" />
+                                        </Button>
+                                        {activeEnv && (
+                                            <>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    title="Rename environment"
+                                                    onClick={() => {
+                                                        setEnvDialogMode("rename");
+                                                        setEnvNameInput(
+                                                            environments.find((e) => e.id === activeEnv)?.name ?? "",
+                                                        );
+                                                        setEnvDialogOpen(true);
+                                                    }}
+                                                    className="h-9 w-9 rounded-md text-muted-foreground hover:text-foreground"
+                                                >
+                                                    <Settings className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    title="Delete environment"
+                                                    onClick={() => setDeleteEnvId(activeEnv)}
+                                                    className="h-9 w-9 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
 
                             <div className="flex items-center gap-2">
                                 <div className="relative group/search flex-1 min-w-[200px]">
@@ -449,24 +630,34 @@ export default function VaultDetailContent({
                                         className="h-9 w-full bg-secondary/50 border-border rounded-md pl-9 pr-4 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all border"
                                     />
                                 </div>
-                                <Button
-                                    onClick={() => vaultKey ? setAddSecretOpen(true) : setUnlockDialogOpen(true)}
-                                    size="sm"
-                                    disabled={derivingKey}
-                                    className="h-9 gap-2 rounded-md font-semibold"
-                                >
-                                    {derivingKey ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : (vaultKey ? <Plus className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />)}
-                                    {derivingKey ? "Decrypting..." : (vaultKey ? "Add Secret" : "Unlock to Add")}
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => vaultKey ? setImportEnvOpen(true) : setUnlockDialogOpen(true)}
-                                    disabled={derivingKey}
-                                    className="h-9 gap-2 rounded-md font-semibold"
-                                >
-                                    {vaultKey ? "Import .env" : "Unlock to Import"}
-                                </Button>
+                                {!isManager && userRole && (
+                                    <span className="flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-secondary/40 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                                        <Eye className="h-3.5 w-3.5" />
+                                        Read-only
+                                    </span>
+                                )}
+                                {isManager && (
+                                    <>
+                                        <Button
+                                            onClick={() => vaultKey ? setAddSecretOpen(true) : toast.error("Vault key is still loading — try again")}
+                                            size="sm"
+                                            disabled={derivingKey || !activeEnv}
+                                            className="h-9 gap-2 rounded-md font-semibold"
+                                        >
+                                            {derivingKey ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : (vaultKey ? <Plus className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />)}
+                                            {derivingKey ? "Decrypting..." : (vaultKey ? "Add Secret" : "Unlock to Add")}
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => vaultKey ? setImportEnvOpen(true) : toast.error("Vault key is still loading — try again")}
+                                            disabled={derivingKey || !activeEnv}
+                                            className="h-9 gap-2 rounded-md font-semibold"
+                                        >
+                                            {vaultKey ? "Import .env" : "Unlock to Import"}
+                                        </Button>
+                                    </>
+                                )}
                                 <Button
                                     variant="ghost"
                                     size="icon"
@@ -500,15 +691,17 @@ export default function VaultDetailContent({
                                         <Share2 className="h-3.5 w-3.5 mr-2" />
                                         Share Bulk
                                     </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 text-xs font-bold uppercase tracking-widest text-destructive hover:bg-destructive/10"
-                                        onClick={() => setBulkDeleteConfirmOpen(true)}
-                                    >
-                                        <Trash2 className="h-3.5 w-3.5 mr-2" />
-                                        Delete Bulk
-                                    </Button>
+                                    {isManager && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 text-xs font-bold uppercase tracking-widest text-destructive hover:bg-destructive/10"
+                                            onClick={() => setBulkDeleteConfirmOpen(true)}
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5 mr-2" />
+                                            Delete Bulk
+                                        </Button>
+                                    )}
                                     <Button
                                         variant="ghost"
                                         size="sm"
@@ -581,11 +774,25 @@ export default function VaultDetailContent({
                                                     <TableCell className="py-4">
                                                         <div className="flex items-center gap-2">
                                                             {editingSecretId === secret.id ? (
-                                                                <input
-                                                                    value={editValue}
-                                                                    onChange={(e) => setEditValue(e.target.value)}
-                                                                    className="bg-secondary border border-border rounded px-2 py-1 w-full text-xs font-mono"
-                                                                />
+                                                                <>
+                                                                    <input
+                                                                        value={editValue}
+                                                                        onChange={(e) => setEditValue(e.target.value)}
+                                                                        className="bg-secondary border border-border rounded px-2 py-1 w-full text-xs font-mono"
+                                                                    />
+                                                                    <select
+                                                                        value={editEnvId}
+                                                                        onChange={(e) => setEditEnvId(e.target.value)}
+                                                                        title="Move to environment"
+                                                                        className="bg-secondary border border-border rounded px-2 py-1 text-xs shrink-0"
+                                                                    >
+                                                                        {environments.map((env) => (
+                                                                            <option key={env.id} value={env.id}>
+                                                                                {env.name}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                </>
                                                             ) : (
                                                                 <>
                                                                     <div className="max-w-[250px] overflow-x-auto scrollbar-hide">
@@ -597,7 +804,7 @@ export default function VaultDetailContent({
                                                                         )}>
                                                                             {showValues[secret.id]
                                                                                 ? (decryptedSecrets[secret.id] || "Loading...")
-                                                                                : "••••••••••••••••••••"}
+                                                                                : "â¢â¢â¢â¢â¢â¢â¢â¢â¢â¢â¢â¢â¢â¢â¢â¢â¢â¢â¢â¢"}
                                                                         </code>
                                                                     </div>
                                                                     <Button
@@ -647,18 +854,21 @@ export default function VaultDetailContent({
                                                                             >
                                                                                 <Copy className="h-3.5 w-3.5" />
                                                                             </Button>
-                                                                            <Button
-                                                                                variant="ghost"
-                                                                                size="icon"
-                                                                                className="h-8 w-8 rounded-md text-emerald-500 hover:bg-emerald-500/10"
-                                                                                onClick={() => {
-                                                                                    setEditKey(secret.key);
-                                                                                    setEditValue(decryptedSecrets[secret.id]);
-                                                                                    setEditingSecretId(secret.id);
-                                                                                }}
-                                                                            >
-                                                                                <Settings className="h-3.5 w-3.5" />
-                                                                            </Button>
+                                                                            {isManager && (
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="icon"
+                                                                                    className="h-8 w-8 rounded-md text-emerald-500 hover:bg-emerald-500/10"
+                                                                                    onClick={() => {
+                                                                                        setEditKey(secret.key);
+                                                                                        setEditValue(decryptedSecrets[secret.id]);
+                                                                                        setEditEnvId(secret.environment?.id ?? activeEnv ?? "");
+                                                                                        setEditingSecretId(secret.id);
+                                                                                    }}
+                                                                                >
+                                                                                    <Settings className="h-3.5 w-3.5" />
+                                                                                </Button>
+                                                                            )}
                                                                         </>
                                                                     )}
                                                                     <Button
@@ -672,14 +882,16 @@ export default function VaultDetailContent({
                                                                     >
                                                                         <Share2 className="h-3.5 w-3.5" />
                                                                     </Button>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-8 w-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                                                        onClick={() => setDeleteSecretId(secret.id)}
-                                                                    >
-                                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                                    </Button>
+                                                                    {isManager && (
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-8 w-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                                                            onClick={() => setDeleteSecretId(secret.id)}
+                                                                        >
+                                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                                        </Button>
+                                                                    )}
                                                                 </>
                                                             )}
                                                         </div>
@@ -736,6 +948,58 @@ export default function VaultDetailContent({
                 loading={loading}
             />
 
+            <Dialog open={envDialogOpen} onOpenChange={setEnvDialogOpen}>
+                <DialogContent className="max-w-[400px] rounded-lg border-border bg-card">
+                    <DialogHeader>
+                        <DialogTitle className="text-sm font-bold">
+                            {envDialogMode === "create" ? "New Environment" : "Rename Environment"}
+                        </DialogTitle>
+                        <DialogDescription className="text-xs">
+                            {envDialogMode === "create"
+                                ? "Add a new environment to this vault."
+                                : "Rename the selected environment."}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <Input
+                            autoFocus
+                            placeholder="e.g. Preview"
+                            value={envNameInput}
+                            onChange={(e) => setEnvNameInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSaveEnv();
+                            }}
+                            className="h-9 rounded-md bg-secondary/20 border-border text-sm"
+                        />
+                        <div className="flex justify-end gap-3">
+                            <Button
+                                variant="ghost"
+                                onClick={() => setEnvDialogOpen(false)}
+                                className="rounded-md h-9 px-4 text-xs font-bold uppercase tracking-widest"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleSaveEnv}
+                                disabled={envSaving || !envNameInput.trim()}
+                                className="rounded-md h-9 px-6 font-semibold"
+                            >
+                                {envSaving ? "Saving..." : envDialogMode === "create" ? "Create" : "Rename"}
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <ConfirmDialog
+                open={!!deleteEnvId}
+                onOpenChange={(open) => !open && setDeleteEnvId(null)}
+                onConfirm={handleDeleteEnv}
+                title="Delete Environment"
+                description="Deleting this environment permanently removes it and all secrets inside it. This action cannot be undone."
+                loading={deletingEnv}
+            />
+
             <VaultMembersDialog
                 open={membersOpen}
                 onOpenChange={setMembersOpen}
@@ -751,11 +1015,6 @@ export default function VaultDetailContent({
                 onUpdateName={handleUpdateVaultName}
                 onDeleteVault={() => setDeleteVaultOpen(true)}
                 userRole={userRole}
-            />
-
-            <UnlockVaultDialog
-                open={unlockDialogOpen}
-                onOpenChange={setUnlockDialogOpen}
             />
 
             <ShareSecretDialog

@@ -65,14 +65,16 @@ export default function DocsPage() {
                     <section id="introduction" className="space-y-6 mb-16">
                         <h1 className="text-4xl md:text-5xl font-bold tracking-tight">Documentation</h1>
                         <p className="text-xl text-muted-foreground leading-relaxed">
-                            Vaultix is a fully zero-knowledge, client-side encrypted secret manager designed for modern development teams. 
-                            Securely manage environment variables, API keys, and certificates without ever exposing them to the server.
+                            Vaultix is an encrypted secret and password manager for modern teams.
+                            Manage environment variables and a shared password vault, inject secrets
+                            with the CLI, and autofill passwords with the browser extension — all with
+                            passwordless login.
                         </p>
                         <div className="grid sm:grid-cols-2 gap-4 pt-4">
                             <div className="p-6 rounded-2xl bg-primary/5 border border-primary/10 space-y-2">
                                 <Shield className="w-8 h-8 text-primary mb-2" />
-                                <h3 className="font-bold text-lg">Zero-Knowledge</h3>
-                                <p className="text-sm text-muted-foreground">We never see your secrets. Encryption happens entirely on your machine.</p>
+                                <h3 className="font-bold text-lg">Passwordless login</h3>
+                                <p className="text-sm text-muted-foreground">Sign in with an email magic code. Your password vault is zero-knowledge, protected by a master password.</p>
                             </div>
                             <div className="p-6 rounded-2xl bg-secondary/5 border border-border/40 space-y-2">
                                 <Terminal className="w-8 h-8 text-foreground mb-2" />
@@ -85,21 +87,21 @@ export default function DocsPage() {
                     <section id="features" className="space-y-8 mb-20 pt-8 border-t border-border/40">
                         <h2 className="text-3xl font-bold tracking-tight">🚀 Key Features</h2>
                         <ul className="grid gap-4">
-                            <FeatureItem 
-                                title="End-to-End Encryption" 
-                                description="Secrets are encrypted client-side using Libsodium (Argon2id + XChaCha20-Poly1305). Only you hold the decryption keys." 
+                            <FeatureItem
+                                title="Encrypted Vaults & Passwords"
+                                description="Content is encrypted with per-vault / per-entry keys (Libsodium XChaCha20-Poly1305); the database only stores ciphertext."
                             />
-                            <FeatureItem 
-                                title="Developer-First CLI" 
-                                description="Standalone tool to inject secrets into your dev environment or CI/CD pipelines at runtime." 
+                            <FeatureItem
+                                title="Developer-First CLI"
+                                description="Standalone tool to inject secrets into your dev environment or CI/CD pipelines at runtime."
                             />
-                            <FeatureItem 
-                                title="Secure Team Sharing" 
-                                description="Collaborate on vaults using public-key cryptography. Individual vault keys are re-encrypted for each member." 
+                            <FeatureItem
+                                title="Role-Based Team Sharing"
+                                description="Share vaults and individual passwords via public-key cryptography. Owners, moderators, and read-only members are enforced server-side."
                             />
-                            <FeatureItem 
-                                title="Zero-Knowledge Architecture" 
-                                description="The server acts strictly as an encrypted storage engine. We cannot access your data." 
+                            <FeatureItem
+                                title="Browser Extension"
+                                description="Autofill logins on any site and save new passwords from the page, straight from the Chrome extension."
                             />
                         </ul>
                     </section>
@@ -168,22 +170,27 @@ export default function DocsPage() {
                         <div className="p-8 rounded-2xl border border-border bg-card relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
                             <div className="space-y-4">
-                                <h3 className="text-lg font-bold">Deep Dive into Zero-Knowledge</h3>
+                                <h3 className="text-lg font-bold">How encryption works</h3>
                                 <p className="text-muted-foreground leading-relaxed">
-                                    Vaultix uses a multi-layered cryptographic approach to ensure total data sovereignty:
+                                    Vaultix uses two models — server-managed vaults (like Infisical) and a
+                                    zero-knowledge password manager (like 1Password):
                                 </p>
                                 <ul className="space-y-6 mt-6">
-                                    <SecurityDetail 
-                                        label="KDF (Argon2id)" 
-                                        content="Your master password is never sent. It's hashed locally with 64MB of memory to derive your Master Key." 
+                                    <SecurityDetail
+                                        label="Login (magic code)"
+                                        content="Passwordless email magic code. Vaults decrypt immediately with a server-managed identity key — ideal for CLI/CI."
                                     />
-                                    <SecurityDetail 
-                                        label="Identity (X25519)" 
-                                        content="Every user has a Curve25519 keypair. Private keys are stored in Vaultix, but are encrypted with your Master Key." 
+                                    <SecurityDetail
+                                        label="Vaults (X25519)"
+                                        content="Each vault has a symmetric key (XChaCha20) sealed to each member's identity key. The identity private key is wrapped by the server app key (AES-256-GCM)."
                                     />
-                                    <SecurityDetail 
-                                        label="Vault Keys" 
-                                        content="Vaults have unique symmetric keys (XChaCha20). When shared, this key is encrypted with the recipient's public key." 
+                                    <SecurityDetail
+                                        label="Password vault (zero-knowledge)"
+                                        content="A master password (Argon2id) unlocks a separate, client-only keypair. Password entries are sealed to it — the server can never decrypt them."
+                                    />
+                                    <SecurityDetail
+                                        label="Access control"
+                                        content="Role-based permissions (owner / moderator / read-only member) are enforced server-side on every write."
                                     />
                                 </ul>
                             </div>

@@ -12,7 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Check, Copy, Link as LinkIcon, Loader2, Shield, Clock, Eye, UserPlus } from "lucide-react";
+import { Check, Copy, Link as LinkIcon, Loader2, Shield, Clock, Eye, UserPlus, Trash2, Users } from "lucide-react";
 import {
     Select,
     SelectContent,
@@ -26,6 +26,7 @@ import { db } from "@/lib/db";
 import { id } from "@instantdb/react";
 import { api, bearer } from "@/lib/api";
 import { useAuth } from "@/context/auth-context";
+import { usePasswordVault } from "@/context/password-vault";
 
 interface ShareEntry {
     id: string;
@@ -45,7 +46,8 @@ export function SharePasswordDialog({
     content,
     entry,
 }: SharePasswordDialogProps) {
-    const { userData, privateKey } = useAuth();
+    const { userData } = useAuth();
+    const { pwPrivateKey, pwPublicKey } = usePasswordVault();
     const [password, setPassword] = useState("");
     const [expiration, setExpiration] = useState("1"); // hours
     const [maxViews, setMaxViews] = useState("1");
@@ -56,6 +58,46 @@ export function SharePasswordDialog({
     // Share-with-user state
     const [recipientEmail, setRecipientEmail] = useState("");
     const [sharing, setSharing] = useState(false);
+    const [revokingId, setRevokingId] = useState<string | null>(null);
+
+    // Live list of who this entry is currently shared with (perms let the
+    // sharer view their own grants). A `has: one` nested link may arrive as an
+    // object or single-element array.
+    const { data: sharesData } = db.useQuery(
+        entry?.id
+            ? {
+                  passwordShares: {
+                      $: { where: { "entry.id": entry.id } },
+                      recipient: { $user: {} },
+                  },
+              }
+            : null,
+    );
+    const shares = (sharesData?.passwordShares ?? []).map((s) => {
+        const recipient = Array.isArray(s.recipient) ? s.recipient[0] : s.recipient;
+        const user = Array.isArray(recipient?.$user) ? recipient?.$user?.[0] : recipient?.$user;
+        return { id: s.id, email: user?.email ?? null };
+    });
+
+    const handleRevoke = async (shareId: string) => {
+        setRevokingId(shareId);
+        try {
+            const authUser = await db.getAuth();
+            const res = await api.passwords.share.$delete(
+                { json: { shareId } },
+                { headers: bearer(authUser?.refresh_token) },
+            );
+            if (!res.ok) {
+                const body = (await res.json().catch(() => ({}))) as { error?: unknown };
+                throw new Error(typeof body.error === "string" ? body.error : "Failed to revoke access");
+            }
+            toast.success("Access revoked");
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Failed to revoke access");
+        } finally {
+            setRevokingId(null);
+        }
+    };
 
     const handleCreateLink = async () => {
         setLoading(true);
@@ -101,7 +143,7 @@ export function SharePasswordDialog({
             toast.error("Entry not ready.");
             return;
         }
-        if (!privateKey || !userData?.publicKey) {
+        if (!pwPrivateKey || !pwPublicKey) {
             toast.error("Unlock your vault first.");
             return;
         }
@@ -123,16 +165,22 @@ export function SharePasswordDialog({
                 setSharing(false);
                 return;
             }
+            if (!recipient.pwPublicKey) {
+                toast.error("Recipient hasn't set up their password vault yet.");
+                setSharing(false);
+                return;
+            }
 
-            // 2. Recover the entry key, then re-seal it to the recipient's key.
-            //    (Content stays on the entry — this is a live grant, not a copy.)
+            // 2. Recover the entry key, then re-seal it to the recipient's
+            //    password-vault key. (Content stays on the entry — this is a live
+            //    grant, not a copy.)
             const { decryptVaultKeyWithPrivateKey, encryptVaultKeyForUser } = await import("@/lib/crypto");
             const entryKey = await decryptVaultKeyWithPrivateKey(
                 entry.ownerEncryptedKey,
-                userData.publicKey,
-                privateKey,
+                pwPublicKey,
+                pwPrivateKey,
             );
-            const encryptedKey = await encryptVaultKeyForUser(entryKey, recipient.publicKey);
+            const encryptedKey = await encryptVaultKeyForUser(entryKey, recipient.pwPublicKey);
 
             // 3. Persist the grant (server only wires the links; never sees keys).
             const res = await api.passwords.share.$post(
@@ -223,7 +271,7 @@ export function SharePasswordDialog({
                                     disabled={sharing}
                                 />
                                 <p className="text-[10px] text-muted-foreground">
-                                    Re-encrypted for their key. Only they can read it. A snapshot — later edits aren&apos;t pushed.
+                                    Re-encrypted for their key. Only they can read it. The recipient gets live read access — your later edits stay in sync. Revoke anytime.
                                 </p>
                             </div>
                             <DialogFooter>
@@ -233,6 +281,39 @@ export function SharePasswordDialog({
                                     Share
                                 </Button>
                             </DialogFooter>
+
+                            {entry && (
+                                <div className="border-t pt-4 space-y-2">
+                                    <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                                        <Users className="w-3 h-3" /> Shared with
+                                    </div>
+                                    {shares.length > 0 ? (
+                                        <div className="space-y-1">
+                                            {shares.map((s) => (
+                                                <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border border-border/50 px-3 py-2">
+                                                    <span className="text-xs truncate">{s.email ?? "Unknown user"}</span>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-7 shrink-0 text-destructive hover:text-destructive"
+                                                        onClick={() => handleRevoke(s.id)}
+                                                        disabled={revokingId === s.id}
+                                                    >
+                                                        {revokingId === s.id ? (
+                                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                        ) : (
+                                                            <Trash2 className="mr-1 h-3.5 w-3.5" />
+                                                        )}
+                                                        Revoke
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-[10px] text-muted-foreground">Not shared with anyone yet.</p>
+                                    )}
+                                </div>
+                            )}
                         </TabsContent>
 
                         <TabsContent value="link" className="space-y-4 pt-4">

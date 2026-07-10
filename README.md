@@ -1,15 +1,19 @@
-# Vaultix — Zero-Knowledge Secret Manager
+# Vaultix — Secret & Password Manager
 
-Vaultix is a fully zero-knowledge, client-side encrypted secret manager for modern teams. Securely share environment variables, API keys, and certificates with your team without ever exposing them to the server.
+Vaultix is an encrypted secret and password manager for modern teams. Manage
+environment variables and share them across your team (like Infisical), keep a
+shared password vault (like 1Password), and inject secrets into your apps via
+the CLI or autofill them with the browser extension.
 
 [**Visit Vaultix Secure**](https://vaultix-secure.vercel.app/)
 
 ## 🚀 Features
 
-- **End-to-End Encryption**: Secrets are encrypted client-side using Libsodium (Argon2id + XChaCha20-Poly1305). Only you hold the keys.
-- **Developer CLI**: Inject secrets directly into your development environment or CI/CD pipelines with our robust standalone CLI tool.
-- **Secure Sharing**: Share vaults with team members using public-key cryptography. No shared passwords, ever.
-- **Zero-Knowledge Architecture**: We cannot see your secrets, even if we wanted to.
+- **Vaults**: Environment variables grouped by environment (Development / Staging / Production), shareable with role-based team members, injectable via the CLI.
+- **Password Manager**: Store logins + TOTP, share individual entries with teammates, and autofill them with the Chrome extension.
+- **Passwordless login**: Sign in with an email magic code — no passwords to remember.
+- **Developer CLI**: Inject secrets directly into your dev environment or CI/CD pipelines.
+- **Encryption**: Content is encrypted with per-vault / per-entry keys (Libsodium XChaCha20-Poly1305); those keys are shared to members with public-key cryptography (X25519) and protected at rest by a server app key. Transport is TLS.
 
 ## 📦 CLI Installation
 
@@ -33,7 +37,7 @@ iwr -useb https://raw.githubusercontent.com/tsiresymila1/vaultix/main/cli/instal
 vaultix login
 ```
 
-This will open your browser to authenticate. Once logged in, your encrypted private key is downloaded and decrypted locally using your master password.
+This opens your browser to sign in with an email magic code. Once authenticated, the CLI receives a token and your identity key, and can decrypt the vaults you have access to.
 
 ### 2. Connect a Project
 
@@ -94,12 +98,18 @@ vaultix logout
 
 ## 🔐 Security Model
 
-1.  **Master Password**: Your master password is never sent to the server. It is heavily hashed (Argon2id) locally to derived your **Master Key**.
-2.  **User Identity (X25519)**: When you register, we generate a Curve25519 keypair. Your private key is encrypted with your Master Key and stored.
-3.  **Vault Keys (XChaCha20-Poly1305)**: Each vault has a unique symmetric key. This key is encrypted for each member of the vault using their public key.
-4.  **Secret Encryption**: Secrets are encrypted with the Vault Key.
+Vaultix uses **two different models** for its two features:
 
-This ensures that only authenticated members with the correct master password can ever decrypt the vault's contents.
+**Vaults (server-managed, like Infisical)** — optimized for CLI / CI injection:
+1.  **Login**: passwordless email magic code (via InstantDB).
+2.  **Identity keypair (X25519)**: the private key is wrapped with the server app key (`SECRETS_ENC_KEY`, AES-256-GCM) and handed to the client after login — no master password. The server can decrypt vault content.
+3.  **Vault keys (XChaCha20-Poly1305)**: each vault has a symmetric key sealed to each member's public key.
+
+**Password manager (zero-knowledge, like 1Password)**:
+4.  **Master password**: a separate password you set the first time you open your password vault. It never leaves your device — it derives (Argon2id) the key that decrypts a **second keypair** dedicated to passwords.
+5.  **Entry keys**: each password entry has its own key, sealed to your password public key (and to each recipient's when shared). Only someone with the master password can decrypt — **the server cannot**.
+
+Role-based access control (owner / moderator / read-only member) is enforced server-side on every write.
 
 ## 🏗 Monorepo layout
 
@@ -171,10 +181,11 @@ extension, and CLI all call it through the typed `@vaultix/api-client` RPC clien
 
 ### Authentication model
 
-Login uses a **passwordless email magic code** (via InstantDB) for the session,
-plus a separate **master password** that derives your encryption keys locally.
-The master password is never sent to the server; on first sign-in you set it,
-and on later logins you enter it to unlock your vault.
+Login is a **passwordless email magic code** (via InstantDB). Vaults decrypt
+immediately with a server-managed identity key (no master password) — great for
+CLI/CI. The **password manager** is zero-knowledge: the first time you open it you
+set a **master password** that unlocks a separate, client-only keypair; the server
+can never decrypt your passwords.
 
 ## 📄 License
 

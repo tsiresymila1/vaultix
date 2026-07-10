@@ -9,6 +9,12 @@
 //
 // NOTE: the Admin SDK (CLI/extension proxy routes, cron) bypasses these rules and
 // scopes every query manually by the JWT's userId.
+//
+// Vault + membership + environment + secret WRITES are all routed through the
+// role-checked admin API (`/api/vaults/*`), so their client write rules are
+// `false` here — InstantDB permissions can't express "caller is a manager of
+// this specific vault" (role-filtered ref), and this is how read-only members
+// are enforced. Reads stay client-side (live queries) via the membership graph.
 import type { InstantRules } from "@instantdb/react";
 
 const rules = {
@@ -30,41 +36,37 @@ const rules = {
   },
 
   vaults: {
+    // Writes via /api/vaults (admin, role-checked).
     allow: {
       view: "isMember",
-      create: "auth.id != null",
-      update: "isOwner",
-      delete: "isOwner",
+      create: "false",
+      update: "false",
+      delete: "false",
     },
     bind: [
       "isMember",
       "auth.id != null && auth.id in data.ref('members.member.$user.id')",
-      "isOwner",
-      "auth.id != null && auth.id in data.ref('owner.$user.id')",
     ],
   },
 
   vaultMembers: {
+    // Membership managed via /api/vaults/members (admin, role-checked).
     allow: {
       // Any member of the vault can see the membership rows (to render the roster).
       view: "auth.id != null && auth.id in data.ref('vault.members.member.$user.id')",
-      // Only a vault owner/admin manages membership.
-      create: "isVaultManager",
-      update: "isVaultManager",
-      delete: "isVaultManager",
+      create: "false",
+      update: "false",
+      delete: "false",
     },
-    bind: [
-      "isVaultManager",
-      "auth.id != null && auth.id in data.ref('vault.owner.$user.id')",
-    ],
   },
 
   environments: {
+    // Writes via /api/vaults/environments (admin, manager-only).
     allow: {
       view: "isMember",
-      create: "isMember",
-      update: "isMember",
-      delete: "isMember",
+      create: "false",
+      update: "false",
+      delete: "false",
     },
     bind: [
       "isMember",
@@ -73,11 +75,13 @@ const rules = {
   },
 
   secrets: {
+    // Writes via /api/vaults/secrets (admin, manager-only). Read-only members
+    // can view but not mutate — enforced here (create/update/delete = false).
     allow: {
       view: "isMember",
-      create: "isMember",
-      update: "isMember",
-      delete: "isMember",
+      create: "false",
+      update: "false",
+      delete: "false",
     },
     bind: [
       "isMember",

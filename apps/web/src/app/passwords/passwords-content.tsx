@@ -13,7 +13,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/auth-context";
+import {
+  PasswordVaultProvider,
+  usePasswordVault,
+} from "@/context/password-vault";
 import { db } from "@/lib/db";
 import { cn } from "@/lib/utils";
 import { Stagger, RevealItem, AnimatePresence } from "@/components/motion";
@@ -24,11 +29,13 @@ import {
   Eye,
   EyeOff,
   Key,
+  Lock,
   MoreVertical,
   Plus,
   Search,
   Shield,
   Trash2,
+  Unlock,
   Users,
 } from "lucide-react";
 import Image from "next/image";
@@ -38,7 +45,160 @@ import { toast } from "sonner";
 import { PasswordEntry } from "@/types";
 
 export default function PasswordsPageContent() {
-  const { privateKey, userData } = useAuth();
+  return (
+    <PasswordVaultProvider>
+      <PasswordsVaultGate />
+    </PasswordVaultProvider>
+  );
+}
+
+// Master-password gate: set up a master password on first use, unlock it every
+// session, then render the real password manager once the PW private key is in
+// memory.
+function PasswordsVaultGate() {
+  const { needsSetup, unlocked } = usePasswordVault();
+
+  if (needsSetup) return <MasterPasswordSetup />;
+  if (!unlocked) return <MasterPasswordUnlock />;
+  return <PasswordsManager />;
+}
+
+function MasterPasswordSetup() {
+  const { setup } = usePasswordVault();
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.length < 8) {
+      toast.error("Use at least 8 characters for your master password.");
+      return;
+    }
+    if (password !== confirm) {
+      toast.error("Passwords do not match.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await setup(password);
+      toast.success("Password vault created.");
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create password vault.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-1 items-center justify-center min-h-[calc(100vh-12rem)]">
+      <Card className="w-full max-w-md border-border bg-card shadow-sm">
+        <CardHeader className="text-center space-y-2">
+          <div className="mx-auto w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Shield className="h-6 w-6 text-primary" />
+          </div>
+          <CardTitle className="text-xl">
+            Create a master password for your password vault
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            This password encrypts your credentials end-to-end. We never see it,
+            and it cannot be recovered — store it safely.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="master-password">Master password</Label>
+              <Input
+                id="master-password"
+                type="password"
+                autoFocus
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 8 characters"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="master-password-confirm">Confirm password</Label>
+              <Input
+                id="master-password-confirm"
+                type="password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder="Re-enter your master password"
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              <Lock className="mr-2 h-4 w-4" />
+              {loading ? "Creating..." : "Create password vault"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function MasterPasswordUnlock() {
+  const { unlock } = usePasswordVault();
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) return;
+    setLoading(true);
+    try {
+      await unlock(password);
+    } catch {
+      toast.error("Incorrect master password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-1 items-center justify-center min-h-[calc(100vh-12rem)]">
+      <Card className="w-full max-w-md border-border bg-card shadow-sm">
+        <CardHeader className="text-center space-y-2">
+          <div className="mx-auto w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Lock className="h-6 w-6 text-primary" />
+          </div>
+          <CardTitle className="text-xl">Unlock your password vault</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Enter your master password to decrypt your credentials.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="unlock-password">Master password</Label>
+              <Input
+                id="unlock-password"
+                type="password"
+                autoFocus
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Your master password"
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              <Unlock className="mr-2 h-4 w-4" />
+              {loading ? "Unlocking..." : "Unlock"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PasswordsManager() {
+  const { userData } = useAuth();
+  const { pwPrivateKey, pwPublicKey } = usePasswordVault();
   const { data } = db.useQuery(
     userData
       ? {
@@ -80,7 +240,7 @@ export default function PasswordsPageContent() {
     encryptedKey: string;
     entry?: { encryptedPassword: string; passwordNonce: string } | null;
   }) => {
-    if (!privateKey || !userData?.publicKey) {
+    if (!pwPrivateKey || !pwPublicKey) {
       toast.error("Unlock your vault first.");
       return;
     }
@@ -93,8 +253,8 @@ export default function PasswordsPageContent() {
       // Envelope: unseal the entry key, then decrypt the live entry content.
       const entryKey = await decryptVaultKeyWithPrivateKey(
         share.encryptedKey,
-        userData.publicKey,
-        privateKey,
+        pwPublicKey,
+        pwPrivateKey,
       );
       const pass = await decryptSecret(
         share.entry.encryptedPassword,
@@ -107,6 +267,53 @@ export default function PasswordsPageContent() {
       toast.error("Could not decrypt shared password.");
     }
   };
+
+  // Recipient reveal: shared entries are read-only. Toggling open decrypts the
+  // live entry content (owner is not us, so no edit path is offered).
+  const [revealedShares, setRevealedShares] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [sharedDecrypted, setSharedDecrypted] = useState<
+    Record<string, string>
+  >({});
+  const [sharedPassVisible, setSharedPassVisible] = useState<
+    Record<string, boolean>
+  >({});
+
+  const revealSharedPassword = async (share: {
+    id: string;
+    encryptedKey: string;
+    entry?: { encryptedPassword: string; passwordNonce: string } | null;
+  }) => {
+    const willOpen = !revealedShares[share.id];
+    setRevealedShares((prev) => ({ ...prev, [share.id]: willOpen }));
+    if (!willOpen || sharedDecrypted[share.id]) return;
+    if (!pwPrivateKey || !pwPublicKey) {
+      toast.error("Unlock your vault first.");
+      return;
+    }
+    if (!share.entry) {
+      toast.error("This share is no longer available.");
+      return;
+    }
+    try {
+      const { decryptVaultKeyWithPrivateKey, decryptSecret } = await import("@/lib/crypto");
+      const entryKey = await decryptVaultKeyWithPrivateKey(
+        share.encryptedKey,
+        pwPublicKey,
+        pwPrivateKey,
+      );
+      const pass = await decryptSecret(
+        share.entry.encryptedPassword,
+        share.entry.passwordNonce,
+        entryKey,
+      );
+      setSharedDecrypted((prev) => ({ ...prev, [share.id]: pass }));
+    } catch {
+      toast.error("Could not decrypt shared entry.");
+    }
+  };
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -139,7 +346,7 @@ export default function PasswordsPageContent() {
   const selectedPassword = passwords.find((p) => p.id === selectedId);
 
   useEffect(() => {
-    if (!selectedId || !privateKey || !userData?.publicKey) return;
+    if (!selectedId || !pwPrivateKey || !pwPublicKey) return;
     const entry = passwords.find((p) => p.id === selectedId);
     if (!entry) return;
 
@@ -149,8 +356,8 @@ export default function PasswordsPageContent() {
         // Envelope: unseal the entry key with our private key, then decrypt.
         const entryKey = await decryptVaultKeyWithPrivateKey(
           entry.ownerEncryptedKey,
-          userData.publicKey,
-          privateKey,
+          pwPublicKey,
+          pwPrivateKey,
         );
 
         const pass = await decryptSecret(
@@ -185,7 +392,7 @@ export default function PasswordsPageContent() {
     if (!decryptedValues[selectedId]) {
       decrypt();
     }
-  }, [selectedId, privateKey, userData?.publicKey, passwords, decryptedValues]);
+  }, [selectedId, pwPrivateKey, pwPublicKey, passwords, decryptedValues]);
 
   const filteredPasswords = passwords.filter(
     (p) =>
@@ -337,28 +544,98 @@ export default function PasswordsPageContent() {
                 </div>
                 <div className="divide-y">
                   {receivedShares.map((s) => (
-                    <div key={s.id} className="flex items-center gap-3 p-4">
-                      <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                        <Key className="w-5 h-5 text-primary" />
+                    <div key={s.id}>
+                      <div className="flex items-center gap-3 p-4">
+                        <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                          <Key className="w-5 h-5 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold truncate">
+                            {s.entry?.title ?? "Shared entry"}
+                          </h3>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {s.entry?.username || "No username"} · from{" "}
+                            {s.sharedByEmail ?? "someone"}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          title={revealedShares[s.id] ? "Hide details" : "Reveal details"}
+                          onClick={() => revealSharedPassword(s)}
+                        >
+                          {revealedShares[s.id] ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          title="Copy password"
+                          onClick={() => copySharedPassword(s)}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-semibold truncate">
-                          {s.entry?.title ?? "Shared entry"}
-                        </h3>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {s.entry?.username || "No username"} · from{" "}
-                          {s.sharedByEmail ?? "someone"}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        title="Copy password"
-                        onClick={() => copySharedPassword(s)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
+
+                      {revealedShares[s.id] && (
+                        <div className="px-4 pb-4 space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
+                              Username
+                            </label>
+                            <Input
+                              readOnly
+                              value={s.entry?.username || ""}
+                              className="bg-secondary/30 h-9 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
+                              URL / Website
+                            </label>
+                            <Input
+                              readOnly
+                              value={s.entry?.websiteUrl || ""}
+                              className="bg-secondary/30 h-9 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
+                              Password
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                readOnly
+                                type={sharedPassVisible[s.id] ? "text" : "password"}
+                                value={sharedDecrypted[s.id] ?? "••••••••••••"}
+                                className="bg-secondary/30 font-mono h-9 text-sm"
+                              />
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-9 w-9 shrink-0"
+                                onClick={() =>
+                                  setSharedPassVisible((prev) => ({
+                                    ...prev,
+                                    [s.id]: !prev[s.id],
+                                  }))
+                                }
+                              >
+                                {sharedPassVisible[s.id] ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

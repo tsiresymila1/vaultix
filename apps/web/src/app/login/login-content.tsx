@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { db } from "@/lib/db";
-import { deriveMasterKey, decryptPrivateKey, fromBase64 } from "@/lib/crypto";
+import { api, bearer } from "@/lib/api";
+import { generateUserKeyPair } from "@/lib/crypto";
 import { useAuth } from "@/context/auth-context";
 import Link from "next/link";
 import { Shield, Loader2 } from "lucide-react";
@@ -14,22 +15,21 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "@/components/motion";
 import { fade } from "@/lib/motion";
 
-type Step = "email" | "code" | "unlock";
+type Step = "email" | "code";
 
 export default function LoginPageContent() {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const { setKeys } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const returnTo = searchParams.get("returnTo");
-  // CLI/extension callbacks only need an authenticated session (the master
-  // password never leaves those clients), so we skip the web unlock step.
+  // CLI/extension callbacks only need an authenticated session.
   const isTokenCallback = !!returnTo && returnTo.includes("callback=");
+  const dest = returnTo && !isTokenCallback ? returnTo : "/vaults";
 
   const sendCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,48 +56,32 @@ export default function LoginPageContent() {
         return;
       }
 
-      // Confirm a profile exists; otherwise send the user to onboarding.
-      const { data } = await db.queryOnce({
-        profiles: { $: { where: { "$user.email": email } } },
-      });
-      const profiles = data.profiles;
-      if (!profiles || profiles.length === 0) {
-        toast.info("Finish setting up your identity");
-        router.push("/register");
+      const authUser = await db.getAuth();
+      const meRes = await api.account.me.$get(
+        {},
+        { headers: bearer(authUser?.refresh_token) },
+      );
+      const me = meRes.ok ? await meRes.json() : { profile: null };
+
+      if (me.profile) {
+        setKeys(me.profile.privateKey, me.profile.publicKey);
+        toast.success("Welcome back to Vaultix");
+        router.push(dest);
         return;
       }
-      setStep("unlock");
+
+      // First time on this account — create the identity inline.
+      const keyPair = await generateUserKeyPair();
+      const res = await api.account.setup.$post(
+        { json: { publicKey: keyPair.publicKey, privateKey: keyPair.privateKey } },
+        { headers: bearer(authUser?.refresh_token) },
+      );
+      if (!res.ok) throw new Error("Could not set up your account — try again.");
+      setKeys(keyPair.privateKey, keyPair.publicKey);
+      toast.success("Welcome to Vaultix");
+      router.push(dest);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Invalid code");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const unlock = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const { data } = await db.queryOnce({
-        profiles: { $: { where: { "$user.email": email } } },
-      });
-      const profiles = data.profiles;
-      const profile = profiles?.[0];
-      if (!profile) throw new Error("Profile not found. Please register again.");
-
-      const salt = await fromBase64(profile.masterKeySalt);
-      const masterKey = await deriveMasterKey(password, salt);
-      const privateKey = await decryptPrivateKey(
-        profile.encryptedPrivateKey,
-        profile.privateKeyNonce,
-        masterKey,
-      );
-
-      setKeys(masterKey, privateKey);
-      toast.success("Welcome back to Vaultix");
-      router.push(returnTo && !isTokenCallback ? returnTo : "/vaults");
-    } catch {
-      toast.error("Incorrect master password");
     } finally {
       setLoading(false);
     }
@@ -140,79 +124,59 @@ export default function LoginPageContent() {
             <p className="text-muted-foreground text-sm">
               {step === "email" && "Enter your email to receive a login code"}
               {step === "code" && `Enter the code we sent to ${email}`}
-              {step === "unlock" && "Enter your master password to unlock"}
             </p>
           </div>
 
           <AnimatePresence mode="wait">
-          <motion.div key={step} variants={fade} initial="hidden" animate="show" exit="exit">
-          {step === "email" && (
-            <form onSubmit={sendCode} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">Email</label>
-                <Input
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send code"}
-              </Button>
-            </form>
-          )}
-
-          {step === "code" && (
-            <form onSubmit={verifyCode} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">Login code</label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder="123456"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
-              </Button>
-            </form>
-          )}
-
-          {step === "unlock" && (
-            <form onSubmit={unlock} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">Master password</label>
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
-                  required
-                  autoFocus
-                />
-              </div>
-              <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Unlocking...</span>
+            <motion.div key={step} variants={fade} initial="hidden" animate="show" exit="exit">
+              {step === "email" && (
+                <form onSubmit={sendCode} className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium leading-none">Email</label>
+                    <Input
+                      type="email"
+                      placeholder="name@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
+                      required
+                    />
                   </div>
-                ) : (
-                  "Unlock"
-                )}
-              </Button>
-            </form>
-          )}
-          </motion.div>
+                  <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send code"}
+                  </Button>
+                </form>
+              )}
+
+              {step === "code" && (
+                <form onSubmit={verifyCode} className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium leading-none">Login code</label>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="123456"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      className="h-9 rounded-md focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-0"
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <Button type="submit" className="w-full h-9 rounded-md text-sm font-medium" disabled={loading}>
+                    {loading ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Signing in...</span>
+                      </div>
+                    ) : (
+                      "Verify & sign in"
+                    )}
+                  </Button>
+                </form>
+              )}
+            </motion.div>
           </AnimatePresence>
 
           <div className="flex flex-col gap-4 text-center mt-6">

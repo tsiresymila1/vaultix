@@ -4,13 +4,14 @@ const VALID = {
   NEXT_PUBLIC_INSTANT_APP_ID: "00000000-0000-0000-0000-000000000000",
   INSTANT_ADMIN_TOKEN: "admin-token",
   AUTH_JWT_SECRET: "a-cli-jwt-secret-that-is-at-least-32-characters",
+  SECRETS_ENC_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // 32 zero bytes
   CRON_SECRET: "cron-secret-16chars",
 };
 
 function applyEnv(env: Record<string, string | undefined>) {
   // clientEnv parses at import time from NEXT_PUBLIC_INSTANT_APP_ID, so keep it set.
   process.env.NEXT_PUBLIC_INSTANT_APP_ID = env.NEXT_PUBLIC_INSTANT_APP_ID;
-  for (const key of ["INSTANT_ADMIN_TOKEN", "AUTH_JWT_SECRET", "CRON_SECRET"] as const) {
+  for (const key of ["INSTANT_ADMIN_TOKEN", "AUTH_JWT_SECRET", "SECRETS_ENC_KEY", "CRON_SECRET"] as const) {
     if (env[key] === undefined) {
       delete process.env[key];
     } else {

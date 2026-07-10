@@ -10,6 +10,11 @@ const serverSchema = z.object({
   AUTH_JWT_SECRET: z
     .string()
     .min(32, "AUTH_JWT_SECRET must be at least 32 chars (no insecure default allowed)"),
+  // App key that wraps each user's private key at rest (base64 of 32 bytes).
+  // Generate: openssl rand -base64 32
+  SECRETS_ENC_KEY: z
+    .string()
+    .refine((v) => Buffer.from(v, "base64").length === 32, "SECRETS_ENC_KEY must be base64 of 32 bytes"),
   CRON_SECRET: z.string().min(16, "CRON_SECRET must be at least 16 chars"),
   RESEND_API_KEY: z.string().min(1).optional(),
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
@@ -27,6 +32,7 @@ export function serverEnv(): z.infer<typeof serverSchema> {
     NEXT_PUBLIC_INSTANT_APP_ID: process.env.NEXT_PUBLIC_INSTANT_APP_ID,
     INSTANT_ADMIN_TOKEN: process.env.INSTANT_ADMIN_TOKEN,
     AUTH_JWT_SECRET: process.env.AUTH_JWT_SECRET,
+    SECRETS_ENC_KEY: process.env.SECRETS_ENC_KEY,
     CRON_SECRET: process.env.CRON_SECRET,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
