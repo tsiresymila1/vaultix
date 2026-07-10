@@ -151,7 +151,7 @@ extension, and CLI all call it through the typed `@vaultix/api-client` RPC clien
    ```
    NEXT_PUBLIC_INSTANT_APP_ID=your-instant-app-id
    INSTANT_ADMIN_TOKEN=your-instant-admin-token
-   CLI_JWT_SECRET=$(openssl rand -hex 32)
+   AUTH_JWT_SECRET=$(openssl rand -hex 32)
    CRON_SECRET=$(openssl rand -hex 16)
    ```
 

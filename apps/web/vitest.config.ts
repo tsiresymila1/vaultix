@@ -13,7 +13,7 @@ export default defineConfig({
     env: {
       NEXT_PUBLIC_INSTANT_APP_ID: "00000000-0000-0000-0000-000000000000",
       INSTANT_ADMIN_TOKEN: "test-admin-token",
-      CLI_JWT_SECRET: "test-cli-jwt-secret-at-least-32-chars-long",
+      AUTH_JWT_SECRET: "test-cli-jwt-secret-at-least-32-chars-long",
       CRON_SECRET: "test-cron-secret-16chars",
     },
   },

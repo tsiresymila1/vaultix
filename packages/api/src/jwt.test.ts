@@ -1,6 +1,6 @@
 // Env must be set BEFORE importing the module — serverEnv() validates at first
-// call and jwt.ts reads CLI_JWT_SECRET through it.
-process.env.CLI_JWT_SECRET = "test-cli-jwt-secret-at-least-32-chars-long";
+// call and jwt.ts reads AUTH_JWT_SECRET through it.
+process.env.AUTH_JWT_SECRET = "test-cli-jwt-secret-at-least-32-chars-long";
 process.env.INSTANT_ADMIN_TOKEN = "test-admin-token";
 process.env.CRON_SECRET = "test-cron-secret-16chars";
 process.env.NEXT_PUBLIC_INSTANT_APP_ID = "00000000-0000-0000-0000-000000000000";

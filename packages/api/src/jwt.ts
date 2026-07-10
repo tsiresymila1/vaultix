@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { serverEnv } from "./env";
 
 function getSecret() {
-  return new TextEncoder().encode(serverEnv().CLI_JWT_SECRET);
+  return new TextEncoder().encode(serverEnv().AUTH_JWT_SECRET);
 }
 
 export interface CliTokenPayload {
