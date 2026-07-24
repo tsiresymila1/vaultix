@@ -42,7 +42,7 @@ export function VaultMembersDialog({
     vaultName,
     vaultKey,
 }: VaultMembersDialogProps) {
-    const { user, userData } = useAuth();
+    const { userData } = useAuth();
     const [inviteEmail, setInviteEmail] = useState("");
     const [inviteRole, setInviteRole] = useState<"moderator" | "member">("member");
     const [inviting, setInviting] = useState(false);
@@ -297,4 +297,3 @@ export function VaultMembersDialog({
         </Dialog>
     );
 }
-

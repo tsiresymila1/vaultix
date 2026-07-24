@@ -79,6 +79,18 @@ export const passwordCreateSchema = z.object({
   notes: z.string().optional(),
 });
 
+// --- password entry update / delete (owner-checked; content re-encrypted client-side) ---
+export const passwordUpdateSchema = z.object({
+  entryId: z.string().min(1),
+  title: z.string().min(1).optional(),
+  websiteUrl: z.string().optional(),
+  username: z.string().optional(),
+  notes: z.string().optional(),
+  encryptedPassword: z.string().min(1).optional(),
+  passwordNonce: z.string().min(1).optional(),
+});
+export const passwordDeleteSchema = z.object({ entryId: z.string().min(1) });
+
 // --- password sharing (envelope: grant the entry key, content stays on entry) ---
 export const passwordShareSchema = z.object({
   recipientEmail: z.string().email(),

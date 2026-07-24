@@ -24,7 +24,7 @@ export default function SharedSecretPage({ params }: SharedSecretPageProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [secretValue, setSecretValue] = useState<string | null>(null);
-    const [metadata, setMetadata] = useState<{ expires_at: string; views_remaining: number | null } | null>(null);
+    const [metadata] = useState<{ expires_at: string; views_remaining: number | null } | null>(null);
     const [revealed, setRevealed] = useState(false);
     const [copied, setCopied] = useState(false);
     const [decryptionKey, setDecryptionKey] = useState<string | null>(null);

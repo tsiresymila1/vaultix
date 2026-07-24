@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
                     <section className="space-y-4">
                         <h2 className="text-xl font-semibold border-b border-border pb-2">1. Overview</h2>
                         <p className="text-muted-foreground">
-                            Your data is always encrypted at rest. <strong>Vaults</strong> (environment variables) are server-managed: their keys are protected by a server application key, so we technically can decrypt vault content (we don't access it in normal operation) — this enables passwordless login and CLI/CI use. Your <strong>password manager</strong> is <strong>zero-knowledge</strong>: it is protected by a master password that never leaves your device, so we can never decrypt your passwords.
+                            Your data is always encrypted at rest. <strong>Vaults</strong> (environment variables) are server-managed: their keys are protected by a server application key, so we technically can decrypt vault content (we don&apos;t access it in normal operation) — this enables passwordless login and CLI/CI use. Your <strong>password manager</strong> is <strong>zero-knowledge</strong>: it is protected by a master password that never leaves your device, so we can never decrypt your passwords.
                         </p>
                     </section>
 

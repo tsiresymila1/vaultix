@@ -75,11 +75,8 @@ export default function SettingsPageContent() {
         if (settings) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setDarkMode(settings.theme !== 'light');
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setAutoLock(settings.auto_lock ?? true);
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setLockTimeout(settings.lock_timeout ?? 15);
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setNotifications(settings.email_notifications ?? true);
         }
     }, [userData]);
@@ -250,4 +247,3 @@ export default function SettingsPageContent() {
         </div>
     );
 }
-

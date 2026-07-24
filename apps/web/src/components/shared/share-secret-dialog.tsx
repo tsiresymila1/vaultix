@@ -23,7 +23,7 @@ import { decryptSecret, encryptSecret, generateVaultKey } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { id } from "@instantdb/react";
 import { Secret } from "@/types";
-import { Check, Copy, Link as LinkIcon, Loader2, Share2 } from "lucide-react";
+import { Check, Copy, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 

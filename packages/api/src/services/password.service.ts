@@ -2,6 +2,51 @@ import { HTTPException } from "hono/http-exception";
 import { id } from "@instantdb/admin";
 import { createAdminDb } from "../db-admin";
 
+async function ownedEntry(userId: string, entryId: string) {
+  const db = createAdminDb();
+  const { passwordEntries } = await db.query({
+    passwordEntries: { $: { where: { id: entryId } }, owner: { $user: {} }, shares: {} },
+  });
+  const entry = passwordEntries?.[0];
+  if (!entry) throw new HTTPException(404, { message: "Entry not found" });
+  const ownerUser = Array.isArray(entry.owner) ? entry.owner[0]?.$user : entry.owner?.$user;
+  const ownerUserId = Array.isArray(ownerUser) ? ownerUser[0]?.id : ownerUser?.id;
+  if (ownerUserId !== userId) throw new HTTPException(403, { message: "Not your entry" });
+  return { db, entry };
+}
+
+/** Update an owned entry (metadata + optionally re-encrypted content). */
+export async function updatePasswordEntry(
+  userId: string,
+  input: {
+    entryId: string;
+    title?: string;
+    websiteUrl?: string;
+    username?: string;
+    notes?: string;
+    encryptedPassword?: string;
+    passwordNonce?: string;
+  },
+) {
+  const { db } = await ownedEntry(userId, input.entryId);
+  const patch: Record<string, string | number> = { updatedAt: Date.now() };
+  for (const k of ["title", "websiteUrl", "username", "notes", "encryptedPassword", "passwordNonce"] as const) {
+    if (input[k] !== undefined) patch[k] = input[k] as string;
+  }
+  await db.transact(db.tx.passwordEntries[input.entryId].update(patch));
+  return { ok: true };
+}
+
+/** Delete an owned entry and its shares. */
+export async function deletePasswordEntry(userId: string, entryId: string) {
+  const { db, entry } = await ownedEntry(userId, entryId);
+  await db.transact([
+    ...(entry.shares ?? []).map((sh) => db.tx.passwordShares[sh.id].delete()),
+    db.tx.passwordEntries[entryId].delete(),
+  ]);
+  return { ok: true };
+}
+
 interface CreateEntryInput {
   title: string;
   websiteUrl?: string;

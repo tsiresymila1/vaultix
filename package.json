@@ -11,6 +11,11 @@
     "typecheck": "turbo run typecheck",
     "dev:web": "turbo run dev --filter=@vaultix/web",
     "build:web": "turbo run build --filter=@vaultix/web",
+    "mobile": "pnpm --filter @vaultix/mobile start",
+    "mobile:android": "pnpm --filter @vaultix/mobile android",
+    "mobile:ios": "pnpm --filter @vaultix/mobile ios",
+    "mobile:prebuild": "pnpm --filter @vaultix/mobile prebuild",
+    "mobile:prebuild:android": "pnpm --filter @vaultix/mobile exec expo prebuild --platform android",
     "release": "bash scripts/release.sh"
   },
   "devDependencies": {

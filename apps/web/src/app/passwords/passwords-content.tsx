@@ -39,7 +39,7 @@ import {
   Users,
 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { PasswordEntry } from "@/types";
@@ -211,7 +211,10 @@ function PasswordsManager() {
         }
       : null,
   );
-  const passwords = (data?.passwordEntries as PasswordEntry[]) ?? [];
+  const passwords = useMemo(
+    () => (data?.passwordEntries as PasswordEntry[] | undefined) ?? [],
+    [data?.passwordEntries],
+  );
 
   // Passwords shared with me by other users.
   const { data: sharesData } = db.useQuery(

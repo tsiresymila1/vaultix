@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["VaultixAutofillModule"]
+  },
+  "android": {
+    "modules": ["com.vaultix.autofill.VaultixAutofillModule"]
+  }
+}
