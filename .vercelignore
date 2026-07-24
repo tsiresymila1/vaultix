@@ -1,0 +1,6 @@
+apps/mobile/
+apps/extension/
+apps/cli/
+**/.next/
+**/.turbo/
+**/node_modules/
