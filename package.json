@@ -22,6 +22,9 @@
     "turbo": "^2.5.8"
   },
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "react-native-libsodium"
+    ],
     "overrides": {
       "@types/react": "19.2.7",
       "@types/react-dom": "19.2.2"

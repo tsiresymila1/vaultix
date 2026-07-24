@@ -3,12 +3,14 @@ const {
   withAndroidManifest,
   withDangerousMod,
   withAppBuildGradle,
+  withGradleProperties,
 } = require("@expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
 const APP_GROUP = "group.ts.mila.vaultix";
 const SECURITY_DEP = "androidx.security:security-crypto:1.1.0-alpha06";
+const ANDROID_MIN_SDK = 26;
 
 // --- iOS: App Group on the main app (so it can write the shared credential store).
 // The AutoFill Credential Provider *extension target* itself must be added in
@@ -26,6 +28,21 @@ function withIosAppGroup(config) {
 
 // --- Android: register the AutofillService, ship its sources, add the crypto dep.
 function withAndroidService(config) {
+  config = withGradleProperties(config, (c) => {
+    const minSdk = c.modResults.find(
+      (item) => item.type === "property" && item.key === "android.minSdkVersion",
+    );
+    const value = String(ANDROID_MIN_SDK);
+
+    if (minSdk) {
+      minSdk.value = value;
+    } else {
+      c.modResults.push({ type: "property", key: "android.minSdkVersion", value });
+    }
+
+    return c;
+  });
+
   config = withAndroidManifest(config, (c) => {
     const app = c.modResults.manifest.application[0];
     app.service = app.service || [];
