@@ -1,16 +1,16 @@
 import { useState } from "react";
-import { View, ScrollView, Pressable, Alert } from "react-native";
+import { Alert, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ChevronLeft, Eye, EyeOff, Sparkles } from "lucide-react-native";
-import { useAuth } from "@/lib/auth";
-import { createPassword } from "@/lib/passwords";
-import { generatePassword } from "@/lib/crypto";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Text } from "@/components/ui/text";
+import { Save } from "lucide-react-native";
 import { FadeIn } from "@/components/motion";
+import { FormField, FormScreenHeader, FormSection, SecretInput } from "@/components/password-form";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Text } from "@/components/ui/text";
+import { useAuth } from "@/lib/auth";
+import { generatePassword } from "@/lib/crypto";
+import { createPassword } from "@/lib/passwords";
 import { colors } from "@/lib/theme";
 
 export default function NewPassword() {
@@ -31,7 +31,7 @@ export default function NewPassword() {
 
   const onSave = async () => {
     if (!title.trim() || !password) {
-      Alert.alert("Missing", "Title and password are required");
+      Alert.alert("Missing information", "Title and password are required.");
       return;
     }
     if (!session) return;
@@ -46,7 +46,7 @@ export default function NewPassword() {
       });
       router.back();
     } catch {
-      Alert.alert("Error", "Failed to save");
+      Alert.alert("Error", "Failed to save password.");
     } finally {
       setSaving(false);
     }
@@ -54,77 +54,73 @@ export default function NewPassword() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <View className="flex-row items-center px-3 py-2">
-        <Pressable onPress={() => router.back()} className="p-2" hitSlop={8}>
-          <ChevronLeft size={24} color={colors.foreground} />
-        </Pressable>
-        <Text className="text-lg font-semibold text-foreground ml-1">New password</Text>
-      </View>
+      <FormScreenHeader title="New password" subtitle="Add a login to your vault" onBack={() => router.back()} />
 
-      <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
-        <FadeIn className="gap-4">
-          <View className="gap-2">
-            <Label>Title</Label>
-            <Input placeholder="e.g. GitHub" value={title} onChangeText={setTitle} autoFocus />
-          </View>
-          <View className="gap-2">
-            <Label>Website</Label>
-            <Input
-              placeholder="github.com"
-              autoCapitalize="none"
-              keyboardType="url"
-              value={url}
-              onChangeText={setUrl}
-            />
-          </View>
-          <View className="gap-2">
-            <Label>Username</Label>
-            <Input
-              placeholder="you@example.com"
-              autoCapitalize="none"
-              value={username}
-              onChangeText={setUsername}
-            />
-          </View>
-
-          <View className="gap-2">
-            <View className="flex-row items-center justify-between">
-              <Label>Password</Label>
-              <Pressable onPress={onGenerate} className="flex-row items-center gap-1 py-1" hitSlop={6}>
-                <Sparkles size={14} color={colors.primary} />
-                <Text className="text-xs font-semibold text-primary">Generate</Text>
-              </Pressable>
-            </View>
-            <View className="flex-row items-center rounded-md border border-border bg-input pr-2">
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 6, paddingBottom: 40, gap: 22 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <FadeIn>
+          <FormSection title="Login details">
+            <FormField label="Title">
+              <Input placeholder="GitHub, Netflix, Banking…" value={title} onChangeText={setTitle} autoFocus />
+            </FormField>
+            <FormField label="Website">
               <Input
-                placeholder="••••••••"
-                secureTextEntry={!show}
+                placeholder="example.com"
                 autoCapitalize="none"
-                value={password}
-                onChangeText={setPassword}
-                className="flex-1 h-12 border-0 bg-transparent px-4"
+                keyboardType="url"
+                value={url}
+                onChangeText={setUrl}
               />
-              <Pressable onPress={() => setShow((v) => !v)} className="p-2" hitSlop={8}>
-                {show ? (
-                  <EyeOff size={18} color={colors.mutedForeground} />
-                ) : (
-                  <Eye size={18} color={colors.mutedForeground} />
-                )}
-              </Pressable>
-            </View>
-          </View>
-
-          <View className="gap-2">
-            <Label>Notes</Label>
-            <Input placeholder="Optional" value={notes} onChangeText={setNotes} multiline />
-          </View>
-
-          <View className="mt-2">
-            <Button loading={saving} onPress={onSave}>
-              <Text>Save</Text>
-            </Button>
-          </View>
+            </FormField>
+            <FormField label="Username or email">
+              <Input
+                placeholder="you@example.com"
+                autoCapitalize="none"
+                value={username}
+                onChangeText={setUsername}
+              />
+            </FormField>
+          </FormSection>
         </FadeIn>
+
+        <FadeIn delay={60}>
+          <FormSection title="Security">
+            <SecretInput
+              value={password}
+              onChangeText={setPassword}
+              visible={show}
+              onToggleVisible={() => setShow((value) => !value)}
+              onGenerate={onGenerate}
+              placeholder="Enter or generate a password"
+            />
+          </FormSection>
+        </FadeIn>
+
+        <FadeIn delay={100}>
+          <FormSection title="Notes">
+            <Input
+              placeholder="Recovery details, account context…"
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              textAlignVertical="top"
+              className="h-24 py-3"
+            />
+          </FormSection>
+        </FadeIn>
+
+        <View>
+          <Button loading={saving} onPress={onSave} disabled={!title.trim() || !password}>
+            <Save size={18} color={colors.primaryForeground} />
+            <Text>Save password</Text>
+          </Button>
+          <Text className="mt-3 text-center text-xs text-muted-foreground">
+            Encrypted locally before it leaves this device
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

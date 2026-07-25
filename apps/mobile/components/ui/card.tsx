@@ -4,7 +4,7 @@ import { Text } from "./text";
 import { cn } from "@/lib/utils";
 
 function Card({ className, ...props }: ViewProps) {
-  return <View className={cn("rounded-lg border border-border bg-card", className)} {...props} />;
+  return <View className={cn("rounded-md border border-border bg-card", className)} {...props} />;
 }
 
 function CardHeader({ className, ...props }: ViewProps) {

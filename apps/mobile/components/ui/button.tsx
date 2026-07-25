@@ -7,21 +7,21 @@ import { cn } from "@/lib/utils";
 import { colors } from "@/lib/theme";
 
 const buttonVariants = cva(
-  "flex-row items-center justify-center gap-2 rounded-md active:opacity-80",
+  "flex-row items-center justify-center gap-2 rounded-md active:opacity-75",
   {
     variants: {
       variant: {
         default: "bg-primary",
         destructive: "bg-destructive",
-        outline: "border border-border bg-transparent",
+        outline: "border border-border bg-card",
         secondary: "bg-secondary",
         ghost: "bg-transparent",
       },
       size: {
-        default: "h-12 px-5",
+        default: "h-[50px] px-5",
         sm: "h-9 px-3",
-        lg: "h-14 px-8",
-        icon: "h-10 w-10",
+        lg: "h-14 px-7",
+        icon: "h-11 w-11",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

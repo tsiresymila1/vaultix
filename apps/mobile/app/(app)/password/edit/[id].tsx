@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
-import { View, ScrollView, Pressable, Alert, ActivityIndicator } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronLeft, Eye, EyeOff, Sparkles } from "lucide-react-native";
-import { useAuth } from "@/lib/auth";
-import { usePasswords, updatePassword } from "@/lib/passwords";
-import { generatePassword } from "@/lib/crypto";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Text } from "@/components/ui/text";
+import { Save } from "lucide-react-native";
 import { FadeIn } from "@/components/motion";
+import { FormField, FormScreenHeader, FormSection, SecretInput } from "@/components/password-form";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Text } from "@/components/ui/text";
+import { useAuth } from "@/lib/auth";
+import { generatePassword } from "@/lib/crypto";
+import { updatePassword, usePasswords } from "@/lib/passwords";
 import { colors } from "@/lib/theme";
 
 export default function EditPassword() {
@@ -18,7 +18,7 @@ export default function EditPassword() {
   const { session } = useAuth();
   const { entries, loading } = usePasswords();
   const router = useRouter();
-  const entry = entries.find((e) => e.id === id);
+  const entry = entries.find((item) => item.id === id);
 
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
@@ -39,10 +39,15 @@ export default function EditPassword() {
     }
   }, [entry, ready]);
 
+  const onGenerate = async () => {
+    setPassword(await generatePassword());
+    setShow(true);
+  };
+
   const onSave = async () => {
     if (!entry || !session) return;
     if (!title.trim()) {
-      Alert.alert("Missing", "Title is required");
+      Alert.alert("Missing information", "Title is required.");
       return;
     }
     setSaving(true);
@@ -56,7 +61,7 @@ export default function EditPassword() {
       });
       router.back();
     } catch {
-      Alert.alert("Error", "Failed to update");
+      Alert.alert("Error", "Failed to update password.");
     } finally {
       setSaving(false);
     }
@@ -64,78 +69,70 @@ export default function EditPassword() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <View className="flex-row items-center px-3 py-2">
-        <Pressable onPress={() => router.back()} className="p-2" hitSlop={8}>
-          <ChevronLeft size={24} color={colors.foreground} />
-        </Pressable>
-        <Text className="text-lg font-semibold text-foreground ml-1">Edit password</Text>
-      </View>
+      <FormScreenHeader title="Edit password" subtitle={entry?.title || "Update login details"} onBack={() => router.back()} />
 
       {loading && !entry ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={colors.primary} />
         </View>
+      ) : !entry ? (
+        <View className="flex-1 items-center justify-center">
+          <Text className="text-muted-foreground">Password not found</Text>
+        </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
-          <FadeIn className="gap-4">
-            <View className="gap-2">
-              <Label>Title</Label>
-              <Input value={title} onChangeText={setTitle} />
-            </View>
-            <View className="gap-2">
-              <Label>Website</Label>
-              <Input autoCapitalize="none" keyboardType="url" value={url} onChangeText={setUrl} />
-            </View>
-            <View className="gap-2">
-              <Label>Username</Label>
-              <Input autoCapitalize="none" value={username} onChangeText={setUsername} />
-            </View>
-
-            <View className="gap-2">
-              <View className="flex-row items-center justify-between">
-                <Label>New password</Label>
-                <Pressable
-                  onPress={async () => {
-                    setPassword(await generatePassword());
-                    setShow(true);
-                  }}
-                  className="flex-row items-center gap-1 py-1"
-                  hitSlop={6}
-                >
-                  <Sparkles size={14} color={colors.primary} />
-                  <Text className="text-xs font-semibold text-primary">Generate</Text>
-                </Pressable>
-              </View>
-              <View className="flex-row items-center rounded-md border border-border bg-input pr-2">
-                <Input
-                  placeholder="Leave blank to keep current"
-                  secureTextEntry={!show}
-                  autoCapitalize="none"
-                  value={password}
-                  onChangeText={setPassword}
-                  className="flex-1 h-12 border-0 bg-transparent px-4"
-                />
-                <Pressable onPress={() => setShow((v) => !v)} className="p-2" hitSlop={8}>
-                  {show ? (
-                    <EyeOff size={18} color={colors.mutedForeground} />
-                  ) : (
-                    <Eye size={18} color={colors.mutedForeground} />
-                  )}
-                </Pressable>
-              </View>
-            </View>
-
-            <View className="gap-2">
-              <Label>Notes</Label>
-              <Input value={notes} onChangeText={setNotes} multiline />
-            </View>
-
-            <View className="mt-2">
-              <Button loading={saving} onPress={onSave}>
-                <Text>Save changes</Text>
-              </Button>
-            </View>
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 6, paddingBottom: 40, gap: 22 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <FadeIn>
+            <FormSection title="Login details">
+              <FormField label="Title">
+                <Input value={title} onChangeText={setTitle} />
+              </FormField>
+              <FormField label="Website">
+                <Input autoCapitalize="none" keyboardType="url" value={url} onChangeText={setUrl} />
+              </FormField>
+              <FormField label="Username or email">
+                <Input autoCapitalize="none" value={username} onChangeText={setUsername} />
+              </FormField>
+            </FormSection>
           </FadeIn>
+
+          <FadeIn delay={60}>
+            <FormSection title="Security">
+              <SecretInput
+                value={password}
+                onChangeText={setPassword}
+                visible={show}
+                onToggleVisible={() => setShow((value) => !value)}
+                onGenerate={onGenerate}
+                placeholder="Leave blank to keep current"
+              />
+            </FormSection>
+          </FadeIn>
+
+          <FadeIn delay={100}>
+            <FormSection title="Notes">
+              <Input
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                textAlignVertical="top"
+                className="h-24 py-3"
+              />
+            </FormSection>
+          </FadeIn>
+
+          <View>
+            <Button loading={saving} onPress={onSave} disabled={!title.trim()}>
+              <Save size={18} color={colors.primaryForeground} />
+              <Text>Save changes</Text>
+            </Button>
+            {password ? (
+              <Text className="mt-3 text-center text-xs text-warning">The account password will be replaced</Text>
+            ) : null}
+          </View>
         </ScrollView>
       )}
     </SafeAreaView>

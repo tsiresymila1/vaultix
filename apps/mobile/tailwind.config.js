@@ -1,26 +1,27 @@
 /** @type {import('tailwindcss').Config} */
-// Mirrors the web theme (Supabase-green dark aesthetic) so mobile matches the app.
 module.exports = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   presets: [require("nativewind/preset")],
   theme: {
     extend: {
       colors: {
-        background: "#1c1c1c",
-        foreground: "#fafafa",
-        card: "#232323",
-        "card-foreground": "#fafafa",
-        primary: "#3ECF8E",
-        "primary-foreground": "#1c1c1c",
-        secondary: "#2e2e2e",
-        "secondary-foreground": "#fafafa",
-        muted: "#2e2e2e",
-        "muted-foreground": "#a1a1aa",
-        accent: "#2e2e2e",
-        border: "#333333",
-        input: "#2e2e2e",
-        destructive: "#ef4444",
-        ring: "#3ECF8E",
+        background: "#0D1114",
+        foreground: "#F4F7F5",
+        card: "#151B1E",
+        "card-foreground": "#F4F7F5",
+        elevated: "#1B2327",
+        primary: "#62E6A7",
+        "primary-foreground": "#07110C",
+        secondary: "#232C31",
+        "secondary-foreground": "#F4F7F5",
+        muted: "#20282C",
+        "muted-foreground": "#8F9BA3",
+        accent: "#7EB6FF",
+        warning: "#F6C86B",
+        border: "#263137",
+        input: "#141A1D",
+        destructive: "#FF6B6B",
+        ring: "#62E6A7",
       },
       fontFamily: {
         sans: ["Outfit_400Regular"],
@@ -31,7 +32,7 @@ module.exports = {
       borderRadius: {
         sm: "6px",
         md: "8px",
-        lg: "10px",
+        lg: "8px",
       },
     },
   },

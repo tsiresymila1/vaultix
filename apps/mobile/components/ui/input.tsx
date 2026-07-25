@@ -13,7 +13,7 @@ function Input({
     <TextInput
       placeholderTextColor={placeholderTextColor ?? colors.mutedForeground}
       className={cn(
-        "h-12 rounded-md border border-border bg-input px-4 text-base text-foreground font-sans",
+        "h-[50px] rounded-md border border-border bg-input px-4 text-base text-foreground font-sans",
         props.editable === false && "opacity-50",
         className,
       )}

@@ -1,12 +1,30 @@
-import { useCallback, useEffect, useState } from "react";
-import { View, Pressable, ScrollView, ActivityIndicator, Alert } from "react-native";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Pressable,
+  ScrollView,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
-import { ChevronLeft, Copy, Eye, EyeOff, Globe, Pencil, Trash2 } from "lucide-react-native";
-import { usePasswords, revealPassword, deletePassword, type PasswordEntry } from "@/lib/passwords";
+import {
+  ChevronLeft,
+  Copy,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Globe2,
+  KeyRound,
+  Pencil,
+  Trash2,
+  UserRound,
+  Users,
+} from "lucide-react-native";
+import { deletePassword, revealPassword, usePasswords, type PasswordEntry } from "@/lib/passwords";
 import { useAuth } from "@/lib/auth";
-import { Card } from "@/components/ui/card";
 import { Text } from "@/components/ui/text";
 import { FadeIn } from "@/components/motion";
 import { colors } from "@/lib/theme";
@@ -23,7 +41,7 @@ export default function PasswordDetail() {
     }, [refresh]),
   );
 
-  const entry = entries.find((e) => e.id === id) as PasswordEntry | undefined;
+  const entry = entries.find((item) => item.id === id) as PasswordEntry | undefined;
   const [password, setPassword] = useState<string | null>(null);
   const [revealing, setRevealing] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -31,13 +49,14 @@ export default function PasswordDetail() {
   const ensureDecrypted = async (): Promise<string | null> => {
     if (password) return password;
     if (!entry || !session) return null;
+
     setRevealing(true);
     try {
-      const pw = await revealPassword(entry, session.pwPublicKey, session.pwPrivateKey);
-      setPassword(pw);
-      return pw;
+      const decrypted = await revealPassword(entry, session.pwPublicKey, session.pwPrivateKey);
+      setPassword(decrypted);
+      return decrypted;
     } catch {
-      Alert.alert("Error", "Failed to decrypt");
+      Alert.alert("Error", "Failed to decrypt this password.");
       return null;
     } finally {
       setRevealing(false);
@@ -45,24 +64,40 @@ export default function PasswordDetail() {
   };
 
   const toggleReveal = async () => {
-    if (!visible) await ensureDecrypted();
-    setVisible((v) => !v);
+    if (!visible) {
+      const decrypted = await ensureDecrypted();
+      if (!decrypted) return;
+    }
+    setVisible((current) => !current);
   };
 
   const copy = async (value: string | null | undefined, label: string) => {
     if (!value) return;
     await Clipboard.setStringAsync(value);
-    Alert.alert("Copied", `${label} copied to clipboard`);
+    Alert.alert("Copied", `${label} copied to clipboard.`);
   };
 
   const copyPassword = async () => {
-    const pw = await ensureDecrypted();
-    if (pw) copy(pw, "Password");
+    const decrypted = await ensureDecrypted();
+    if (decrypted) await copy(decrypted, "Password");
+  };
+
+  const openWebsite = async () => {
+    if (!entry?.website_url) return;
+    const url = /^https?:\/\//i.test(entry.website_url)
+      ? entry.website_url
+      : `https://${entry.website_url}`;
+
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Can't open website", "Check that the website address is valid.");
+    }
   };
 
   const onDelete = () => {
     if (!entry || !session) return;
-    Alert.alert("Delete password?", `"${entry.title}" will be permanently removed.`, [
+    Alert.alert("Delete password?", `\"${entry.title}\" will be permanently removed.`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
@@ -72,7 +107,7 @@ export default function PasswordDetail() {
             await deletePassword(session, entry.id);
             router.back();
           } catch {
-            Alert.alert("Error", "Failed to delete");
+            Alert.alert("Error", "Failed to delete this password.");
           }
         },
       },
@@ -86,20 +121,25 @@ export default function PasswordDetail() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <View className="flex-row items-center justify-between px-3 py-2">
-        <Pressable onPress={() => router.back()} className="p-2" hitSlop={8}>
-          <ChevronLeft size={24} color={colors.foreground} />
-        </Pressable>
-        {entry && !entry.shared ? (
-          <View className="flex-row items-center gap-1">
-            <Pressable onPress={() => router.push(`/(app)/password/edit/${entry.id}`)} className="p-2" hitSlop={8}>
-              <Pencil size={20} color={colors.foreground} />
-            </Pressable>
-            <Pressable onPress={onDelete} className="p-2" hitSlop={8}>
-              <Trash2 size={20} color={colors.destructive} />
-            </Pressable>
-          </View>
-        ) : null}
+      <View className="h-14 flex-row items-center justify-between px-4">
+        <IconButton label="Go back" onPress={() => router.back()}>
+          <ChevronLeft size={22} color={colors.foreground} />
+        </IconButton>
+
+        <Text className="text-base font-semibold text-foreground">Password</Text>
+
+        <View className="w-[92px] flex-row justify-end gap-2">
+          {entry && !entry.shared ? (
+            <>
+              <IconButton label="Edit password" onPress={() => router.push(`/(app)/password/edit/${entry.id}`)}>
+                <Pencil size={18} color={colors.foreground} />
+              </IconButton>
+              <IconButton label="Delete password" onPress={onDelete} destructive>
+                <Trash2 size={18} color={colors.destructive} />
+              </IconButton>
+            </>
+          ) : null}
+        </View>
       </View>
 
       {loading && !entry ? (
@@ -107,56 +147,106 @@ export default function PasswordDetail() {
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : !entry ? (
-        <View className="flex-1 items-center justify-center">
-          <Text className="text-muted-foreground">Not found</Text>
+        <View className="flex-1 items-center justify-center gap-3 px-6">
+          <View className="h-12 w-12 items-center justify-center rounded-md bg-secondary">
+            <KeyRound size={22} color={colors.mutedForeground} />
+          </View>
+          <Text className="text-base font-semibold text-foreground">Password not found</Text>
+          <Text className="text-center text-sm text-muted-foreground">
+            This item may have been removed or is no longer shared with you.
+          </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
+        >
           <FadeIn>
-            <View className="items-center gap-3 mb-8">
-              <View className="w-16 h-16 rounded-2xl items-center justify-center bg-primary/10">
-                <Globe size={28} color={colors.primary} />
+            <View className="items-center pb-7 pt-5">
+              <View className="h-16 w-16 items-center justify-center rounded-md border border-primary/20 bg-primary/10">
+                <Text className="text-2xl font-bold text-primary">
+                  {entry.title.slice(0, 1).toUpperCase()}
+                </Text>
               </View>
-              <Text className="text-2xl font-bold text-foreground text-center">{entry.title}</Text>
-              {entry.website_url ? (
-                <Text className="text-sm text-muted-foreground">{entry.website_url}</Text>
+              <Text className="mt-4 text-center text-2xl font-bold text-foreground">{entry.title}</Text>
+              <View className="mt-1 flex-row items-center gap-1.5">
+                {entry.shared ? <Users size={13} color={colors.accent} /> : null}
+                <Text className="max-w-[280px] text-sm text-muted-foreground" numberOfLines={1}>
+                  {entry.shared ? "Shared with you" : entry.website_url || "Personal password"}
+                </Text>
+              </View>
+            </View>
+          </FadeIn>
+
+          <FadeIn delay={40}>
+            <View className="mb-8 flex-row overflow-hidden rounded-md border border-border bg-card">
+              <QuickAction
+                icon={<UserRound size={20} color={entry.username ? colors.primary : colors.mutedForeground} />}
+                label="Username"
+                onPress={() => copy(entry.username, "Username")}
+                disabled={!entry.username}
+              />
+              <View className="w-px bg-border" />
+              <QuickAction
+                icon={<Copy size={20} color={colors.primary} />}
+                label="Password"
+                onPress={copyPassword}
+                busy={revealing}
+              />
+              <View className="w-px bg-border" />
+              <QuickAction
+                icon={<ExternalLink size={20} color={entry.website_url ? colors.accent : colors.mutedForeground} />}
+                label="Open site"
+                onPress={openWebsite}
+                disabled={!entry.website_url}
+              />
+            </View>
+          </FadeIn>
+
+          <FadeIn delay={80}>
+            <Text className="mb-3 text-sm font-semibold text-foreground">Login details</Text>
+            <View className="overflow-hidden rounded-md border border-border bg-card px-4">
+              <DetailRow
+                icon={<UserRound size={18} color={colors.mutedForeground} />}
+                label="Username"
+                value={entry.username || "Not added"}
+                muted={!entry.username}
+                action={entry.username ? <Copy size={17} color={colors.primary} /> : undefined}
+                onAction={entry.username ? () => copy(entry.username, "Username") : undefined}
+              />
+              <DetailRow
+                icon={<KeyRound size={18} color={colors.mutedForeground} />}
+                label="Password"
+                value={revealing ? "Decrypting..." : visible && password ? password : "••••••••••••"}
+                action={visible ? <EyeOff size={18} color={colors.primary} /> : <Eye size={18} color={colors.primary} />}
+                onAction={toggleReveal}
+              />
+              <DetailRow
+                icon={<Globe2 size={18} color={colors.mutedForeground} />}
+                label="Website"
+                value={entry.website_url || "Not added"}
+                muted={!entry.website_url}
+                action={entry.website_url ? <ExternalLink size={17} color={colors.accent} /> : undefined}
+                onAction={entry.website_url ? openWebsite : undefined}
+                last={!entry.notes}
+              />
+              {entry.notes ? (
+                <DetailRow
+                  icon={<Copy size={18} color={colors.mutedForeground} />}
+                  label="Notes"
+                  value={entry.notes}
+                  action={<Copy size={17} color={colors.primary} />}
+                  onAction={() => copy(entry.notes, "Notes")}
+                  multiline
+                  last
+                />
               ) : null}
             </View>
           </FadeIn>
 
-          <View className="gap-3">
-            <Field label="Username" value={entry.username || "—"} onCopy={() => copy(entry.username, "Username")} />
-
-            {entry.website_url ? (
-              <Field label="Website" value={entry.website_url} onCopy={() => copy(entry.website_url, "Website")} />
-            ) : null}
-
-            <FadeIn delay={60}>
-              <Card className="p-4">
-                <Text className="text-xs text-muted-foreground mb-1">Password</Text>
-                <View className="flex-row items-center justify-between gap-3">
-                  <Text className="flex-1 text-base font-medium text-foreground" numberOfLines={1}>
-                    {revealing ? "…" : visible && password ? password : "••••••••••••"}
-                  </Text>
-                  <View className="flex-row gap-1">
-                    <Pressable onPress={toggleReveal} className="p-2" hitSlop={8}>
-                      {visible ? (
-                        <EyeOff size={18} color={colors.mutedForeground} />
-                      ) : (
-                        <Eye size={18} color={colors.mutedForeground} />
-                      )}
-                    </Pressable>
-                    <Pressable onPress={copyPassword} className="p-2" hitSlop={8}>
-                      <Copy size={18} color={colors.primary} />
-                    </Pressable>
-                  </View>
-                </View>
-              </Card>
-            </FadeIn>
-
-            {entry.notes ? (
-              <Field label="Notes" value={entry.notes} multiline onCopy={() => copy(entry.notes, "Notes")} />
-            ) : null}
+          <View className="mt-5 flex-row items-center justify-center gap-2">
+            <KeyRound size={13} color={colors.mutedForeground} />
+            <Text className="text-xs text-muted-foreground">End-to-end encrypted</Text>
           </View>
         </ScrollView>
       )}
@@ -164,33 +254,104 @@ export default function PasswordDetail() {
   );
 }
 
-function Field({
+function IconButton({
+  children,
   label,
-  value,
-  onCopy,
-  multiline,
+  onPress,
+  destructive = false,
 }: {
+  children: ReactNode;
   label: string;
-  value: string;
-  onCopy?: () => void;
-  multiline?: boolean;
+  onPress: () => void;
+  destructive?: boolean;
 }) {
   return (
-    <Card className="p-4">
-      <Text className="text-xs text-muted-foreground mb-1">{label}</Text>
-      <View className="flex-row items-center justify-between gap-3">
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      onPress={onPress}
+      className={`h-10 w-10 items-center justify-center rounded-md border ${
+        destructive ? "border-destructive/20 bg-destructive/10" : "border-border bg-card"
+      }`}
+      style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+      hitSlop={4}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+function QuickAction({
+  icon,
+  label,
+  onPress,
+  disabled = false,
+  busy = false,
+}: {
+  icon: ReactNode;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  busy?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      disabled={disabled || busy}
+      onPress={onPress}
+      className="h-[82px] flex-1 items-center justify-center gap-2"
+      style={({ pressed }) => ({ opacity: disabled ? 0.45 : pressed ? 0.65 : 1 })}
+    >
+      {busy ? <ActivityIndicator size="small" color={colors.primary} /> : icon}
+      <Text className="text-xs font-medium text-foreground">{label}</Text>
+    </Pressable>
+  );
+}
+
+function DetailRow({
+  icon,
+  label,
+  value,
+  action,
+  onAction,
+  muted = false,
+  multiline = false,
+  last = false,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  action?: ReactNode;
+  onAction?: () => void;
+  muted?: boolean;
+  multiline?: boolean;
+  last?: boolean;
+}) {
+  return (
+    <View className={`min-h-[72px] flex-row items-center gap-3 py-3 ${last ? "" : "border-b border-border"}`}>
+      <View className="h-9 w-9 items-center justify-center rounded-md bg-secondary">{icon}</View>
+      <View className="min-w-0 flex-1">
+        <Text className="text-xs text-muted-foreground">{label}</Text>
         <Text
-          className="flex-1 text-base text-foreground"
+          className={`mt-1 text-[15px] ${muted ? "text-muted-foreground" : "text-foreground"}`}
           numberOfLines={multiline ? undefined : 1}
         >
           {value}
         </Text>
-        {onCopy ? (
-          <Pressable onPress={onCopy} className="p-2" hitSlop={8}>
-            <Copy size={18} color={colors.primary} />
-          </Pressable>
-        ) : null}
       </View>
-    </Card>
+      {action && onAction ? (
+        <Pressable
+          accessibilityLabel={`${label} action`}
+          accessibilityRole="button"
+          onPress={onAction}
+          className="h-10 w-10 items-center justify-center"
+          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+          hitSlop={4}
+        >
+          {action}
+        </Pressable>
+      ) : null}
+    </View>
   );
 }

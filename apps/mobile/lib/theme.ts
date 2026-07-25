@@ -1,13 +1,16 @@
-// Color constants mirroring the web theme — for places className can't reach
-// (icon `color`, StatusBar, native props).
+// Native props cannot consume Tailwind tokens, so keep the mobile palette here too.
 export const colors = {
-  background: "#1c1c1c",
-  foreground: "#fafafa",
-  card: "#232323",
-  primary: "#3ECF8E",
-  primaryForeground: "#1c1c1c",
-  secondary: "#2e2e2e",
-  mutedForeground: "#a1a1aa",
-  border: "#333333",
-  destructive: "#ef4444",
+  background: "#0D1114",
+  foreground: "#F4F7F5",
+  card: "#151B1E",
+  elevated: "#1B2327",
+  primary: "#62E6A7",
+  primaryForeground: "#07110C",
+  secondary: "#232C31",
+  mutedForeground: "#8F9BA3",
+  border: "#263137",
+  input: "#141A1D",
+  accent: "#7EB6FF",
+  warning: "#F6C86B",
+  destructive: "#FF6B6B",
 } as const;
