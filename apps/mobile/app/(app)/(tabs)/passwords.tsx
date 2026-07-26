@@ -51,7 +51,7 @@ export default function Passwords() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScreenHeader
-        eyebrow="Vaultix Password"
+        eyebrow="Password Manager"
         title="Passwords"
         subtitle={`${entries.length} secure ${entries.length === 1 ? "login" : "logins"}`}
         action={

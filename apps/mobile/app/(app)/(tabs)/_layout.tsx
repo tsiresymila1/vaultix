@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { House, KeyRound, Settings } from "lucide-react-native";
+import { KeyRound, Settings, ShieldCheck } from "lucide-react-native";
 import { colors } from "@/lib/theme";
 
 export default function TabsLayout() {
@@ -25,9 +25,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
-          tabBarAccessibilityLabel: "Home tab",
-          tabBarIcon: ({ color, size }) => <House color={color} size={size} strokeWidth={2} />,
+          title: "Vaultix",
+          tabBarAccessibilityLabel: "Vaultix tab",
+          tabBarIcon: ({ color, size }) => <ShieldCheck color={color} size={size} strokeWidth={2} />,
         }}
       />
       <Tabs.Screen

@@ -75,7 +75,7 @@ export default function Login() {
     email: {
       icon: <Mail size={22} color={colors.primary} />,
       title: "Welcome back",
-      subtitle: "Sign in to continue to Vaultix Password.",
+      subtitle: "Sign in to continue to Vaultix.",
     },
     code: {
       icon: <KeyRound size={22} color={colors.accent} />,

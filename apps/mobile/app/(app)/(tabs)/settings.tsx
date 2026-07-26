@@ -34,7 +34,7 @@ export default function Settings() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScrollView contentContainerStyle={{ paddingBottom: 104 }} showsVerticalScrollIndicator={false}>
-        <ScreenHeader eyebrow="Vaultix Password" title="Settings" subtitle="Security and account preferences" />
+        <ScreenHeader eyebrow="Vaultix" title="Settings" subtitle="Security and account preferences" />
 
         <FadeIn className="mx-5 flex-row items-center gap-3 rounded-md border border-border bg-card p-4">
           <View className="h-12 w-12 items-center justify-center rounded-md bg-accent/10">
