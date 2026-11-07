@@ -147,7 +147,7 @@ export default function PasswordDetail() {
         </View>
       ) : !entry ? (
         <View className="flex-1 items-center justify-center gap-3 px-6">
-          <View className="h-12 w-12 items-center justify-center rounded-md bg-secondary">
+          <View className="h-12 w-12 items-center justify-center bg-transparent">
             <KeyRound size={22} color={colors.mutedForeground} />
           </View>
           <Text className="text-base font-semibold text-foreground">Password not found</Text>
@@ -161,13 +161,11 @@ export default function PasswordDetail() {
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
         >
           <FadeIn>
-            <View className="items-center pb-7 pt-5">
-              <View className="h-16 w-16 items-center justify-center rounded-md border border-primary/20 bg-primary/10">
-                <Text className="text-2xl font-bold text-primary">
-                  {entry.title.slice(0, 1).toUpperCase()}
-                </Text>
+            <View className="items-start pb-7 pt-5">
+              <View className="h-12 w-12 justify-center">
+                <KeyRound size={30} color={colors.primary} />
               </View>
-              <Text className="mt-4 text-center text-2xl font-bold text-foreground">{entry.title}</Text>
+              <Text className="mt-4 text-left text-[28px] font-semibold text-foreground">{entry.title}</Text>
               <View className="mt-1 flex-row items-center gap-1.5">
                 {entry.shared ? <Users size={13} color={colors.accent} /> : null}
                 <Text className="max-w-[280px] text-sm text-muted-foreground" numberOfLines={1}>
@@ -178,17 +176,17 @@ export default function PasswordDetail() {
           </FadeIn>
 
           <FadeIn delay={40}>
-            <View className="mb-8 flex-row overflow-hidden rounded-md border border-border bg-card">
+            <View className="mb-8 flex-row overflow-hidden rounded-2xl bg-background">
               <QuickAction
                 icon={<UserRound size={20} color={entry.username ? colors.primary : colors.mutedForeground} />}
-                label="Username"
+                label="Identifiant"
                 onPress={() => copy(entry.username, "Username")}
                 disabled={!entry.username}
               />
               <View className="w-px bg-border" />
               <QuickAction
                 icon={<Copy size={20} color={colors.primary} />}
-                label="Password"
+                label="Mot de passe"
                 onPress={copyPassword}
                 busy={revealing}
               />
@@ -203,11 +201,11 @@ export default function PasswordDetail() {
           </FadeIn>
 
           <FadeIn delay={80}>
-            <Text className="mb-3 text-sm font-semibold text-foreground">Login details</Text>
-            <View className="overflow-hidden rounded-md border border-border bg-card px-4">
+            <Text className="mb-3 text-sm font-semibold text-foreground">Détails de connexion</Text>
+            <View className="overflow-hidden rounded-2xl bg-background px-4">
               <DetailRow
                 icon={<UserRound size={18} color={colors.mutedForeground} />}
-                label="Username"
+                label="Identifiant"
                 value={entry.username || "Not added"}
                 muted={!entry.username}
                 action={entry.username ? <Copy size={17} color={colors.primary} /> : undefined}
@@ -215,14 +213,14 @@ export default function PasswordDetail() {
               />
               <DetailRow
                 icon={<KeyRound size={18} color={colors.mutedForeground} />}
-                label="Password"
+                label="Mot de passe"
                 value={revealing ? "Decrypting..." : visible && password ? password : "••••••••••••"}
                 action={visible ? <EyeOff size={18} color={colors.primary} /> : <Eye size={18} color={colors.primary} />}
                 onAction={toggleReveal}
               />
               <DetailRow
                 icon={<Globe2 size={18} color={colors.mutedForeground} />}
-                label="Website"
+                label="Site associé"
                 value={entry.website_url || "Not added"}
                 muted={!entry.website_url}
                 action={entry.website_url ? <ExternalLink size={17} color={colors.accent} /> : undefined}
@@ -245,7 +243,7 @@ export default function PasswordDetail() {
 
           <View className="mt-5 flex-row items-center justify-center gap-2">
             <KeyRound size={13} color={colors.mutedForeground} />
-            <Text className="text-xs text-muted-foreground">End-to-end encrypted</Text>
+            <Text className="text-xs text-muted-foreground">Chiffrement de bout en bout</Text>
           </View>
         </ScrollView>
       )}
@@ -270,7 +268,7 @@ function IconButton({
       accessibilityRole="button"
       onPress={onPress}
       className={`h-10 w-10 items-center justify-center rounded-md border ${
-        destructive ? "border-destructive/20 bg-destructive/10" : "border-border bg-card"
+        destructive ? "border-destructive/20 bg-destructive/10" : "border-transparent bg-background"
       }`}
       style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
       hitSlop={4}
@@ -329,7 +327,7 @@ function DetailRow({
 }) {
   return (
     <View className={`min-h-[72px] flex-row items-center gap-3 py-3 ${last ? "" : "border-b border-border"}`}>
-      <View className="h-9 w-9 items-center justify-center rounded-md bg-secondary">{icon}</View>
+      <View className="h-9 w-9 items-center justify-center bg-transparent">{icon}</View>
       <View className="min-w-0 flex-1">
         <Text className="text-xs text-muted-foreground">{label}</Text>
         <Text

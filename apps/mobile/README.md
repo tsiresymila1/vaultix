@@ -141,3 +141,16 @@ hostname, remove the login and check it disappears. Repeat with an explicit
 Android package association. Start a sync then sign out and verify no suggestions
 remain. Test empty vaults, shared-entry revocation, and returning from system settings.
 For iOS, repeat in Safari and verify the embedded extension appears in AutoFill.
+
+## Mobile interface
+
+The native app follows the approved compact Material Expressive prototype in
+`design/vaultix-mobile-proposal.html`: light surfaces, platform sans-serif type,
+three destinations (Identifiants, Coffres, Réglages), account sign-in/code/unlock,
+and device-local favorites stored with SecureStore per account. Favorites do not
+sync between devices. Vaults retain the real project/environment model.
+
+Entry icons use local key glyphs so a third-party favicon service never receives
+private vault domains. Autofill activation remains under Réglages. Existing
+password creation, editing, decryption, copying, deletion and shared-entry access
+continue to use the real backend.

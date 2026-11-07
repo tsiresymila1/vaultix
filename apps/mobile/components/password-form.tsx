@@ -20,7 +20,7 @@ export function FormScreenHeader({
       <Pressable
         accessibilityLabel="Go back"
         onPress={onBack}
-        className="h-10 w-10 items-center justify-center rounded-md border border-border bg-card"
+        className="h-12 w-12 items-center justify-center"
         hitSlop={6}
       >
         <ChevronLeft size={21} color={colors.foreground} />
@@ -36,8 +36,8 @@ export function FormScreenHeader({
 export function FormSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <View className="gap-4">
-      <Text className="text-xs font-semibold uppercase text-muted-foreground">{title}</Text>
-      <View className="gap-4 rounded-md border border-border bg-card p-4">{children}</View>
+      <Text className="text-xs font-medium text-muted-foreground">{title}</Text>
+      <View className="gap-4">{children}</View>
     </View>
   );
 }
@@ -75,7 +75,7 @@ export function SecretInput({
           <Text className="text-xs font-semibold text-primary">Generate secure</Text>
         </Pressable>
       </View>
-      <View className="h-[50px] flex-row items-center rounded-md border border-border bg-input pr-2">
+      <View className="h-[52px] flex-row items-center rounded-t-xl border-b border-muted-foreground bg-input pr-2">
         <Input
           placeholder={placeholder}
           secureTextEntry={!visible}

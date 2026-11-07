@@ -1,10 +1,8 @@
 import { useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ArrowLeft, ArrowRight, KeyRound, LockKeyhole, Mail, ShieldCheck } from "lucide-react-native";
-import { Logo } from "@/components/Logo";
-import { FadeIn } from "@/components/motion";
+import { ArrowLeft } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,180 +24,88 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   const onSend = async () => {
-    if (!email.trim()) return;
+    if (loading || !email.trim()) return;
     setLoading(true);
     try {
       await sendCode(email.trim());
       setStep("code");
     } catch (error) {
-      Alert.alert("Error", error instanceof Error ? error.message : "Failed to send code");
+      Alert.alert("Erreur", error instanceof Error ? error.message : "Impossible d’envoyer le code");
     } finally {
       setLoading(false);
     }
   };
 
   const onVerify = async () => {
-    if (!code.trim()) return;
+    if (loading || code.length !== 6) return;
     setLoading(true);
     try {
       const { needsSetup } = await verifyCode(email.trim(), code.trim());
       if (needsSetup) {
         Alert.alert(
-          "Set up your vault",
-          "Set your password-vault master password in the Vaultix web app first, then sign in here.",
+          "Configurer votre coffre",
+          "Configurez d’abord votre mot de passe maître dans l’application web Vaultix, puis connectez-vous ici.",
         );
         return;
       }
       setStep("unlock");
     } catch (error) {
-      Alert.alert("Error", error instanceof Error ? error.message : "Invalid code");
+      Alert.alert("Erreur", error instanceof Error ? error.message : "Code incorrect");
     } finally {
       setLoading(false);
     }
   };
 
   const onUnlock = async () => {
-    if (!master) return;
+    if (loading || !master) return;
     setLoading(true);
     try {
       await unlock(master);
-      router.replace("/(app)/(tabs)");
+      router.replace("/(app)/(tabs)/passwords");
     } catch {
-      Alert.alert("Error", "Incorrect master password");
+      Alert.alert("Erreur", "Mot de passe maître incorrect");
     } finally {
       setLoading(false);
     }
   };
 
-  const content = {
-    email: {
-      icon: <Mail size={22} color={colors.primary} />,
-      title: "Welcome back",
-      subtitle: "Sign in to continue to Vaultix.",
-    },
-    code: {
-      icon: <KeyRound size={22} color={colors.accent} />,
-      title: "Check your inbox",
-      subtitle: `Enter the verification code sent to ${email}.`,
-    },
-    unlock: {
-      icon: <LockKeyhole size={22} color={colors.warning} />,
-      title: "Unlock your vault",
-      subtitle: "Your master password decrypts this session on-device.",
-    },
-  }[step];
-
-  const goBack = () => {
-    if (step === "unlock") setStep("code");
-    if (step === "code") setStep("email");
+  const titles = { email: "Se connecter", code: "Vérifier votre e-mail", unlock: "Déverrouiller le coffre" };
+  const descriptions = {
+    email: "Recevez un code pour vous connecter à votre compte.",
+    code: `Saisissez le code envoyé à ${email}.`,
+    unlock: "Votre mot de passe maître déchiffre le coffre sur cet appareil.",
   };
-
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        className="flex-1"
-      >
-        <View className="flex-row items-center justify-between px-5 pt-2">
-          <Logo size={21} />
-          <View className="flex-row gap-1.5">
-            {[0, 1, 2].map((index) => (
-              <View
-                key={index}
-                className={`h-1.5 w-7 rounded-full ${index <= stepIndex[step] ? "bg-primary" : "bg-secondary"}`}
-              />
-            ))}
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
+        <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+          <View className="h-12 justify-center">
+            {step === "email" ? <Text className="text-xl font-semibold">Vaultix</Text> : (
+              <Pressable accessibilityRole="button" accessibilityLabel="Retour" disabled={loading} onPress={() => setStep(step === "unlock" ? "code" : "email")} className="h-12 w-12 justify-center">
+                <ArrowLeft size={22} color={colors.foreground} />
+              </Pressable>
+            )}
           </View>
-        </View>
-
-        <View className="flex-1 justify-center px-6 pb-10">
-          {step !== "email" ? (
-            <Pressable onPress={goBack} className="mb-7 h-10 w-10 items-center justify-center rounded-md border border-border bg-card">
-              <ArrowLeft size={19} color={colors.foreground} />
-            </Pressable>
-          ) : null}
-
-          <FadeIn key={step}>
-            <View className="mb-8">
-              <View className="mb-5 h-12 w-12 items-center justify-center rounded-md border border-border bg-card">
-                {content.icon}
-              </View>
-              <Text className="text-[30px] font-bold leading-9 text-foreground">{content.title}</Text>
-              <Text className="mt-2 max-w-[320px] text-sm leading-5 text-muted-foreground">
-                {content.subtitle}
-              </Text>
-            </View>
-
-            {step === "email" ? (
-              <View className="gap-5">
-                <View className="gap-2">
-                  <Label className="text-xs text-muted-foreground">Email address</Label>
-                  <Input
-                    placeholder="name@example.com"
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    value={email}
-                    onChangeText={setEmail}
-                    autoFocus
-                    returnKeyType="go"
-                    onSubmitEditing={onSend}
-                  />
-                </View>
-                <Button loading={loading} onPress={onSend} disabled={!email.trim()}>
-                  <Text>Continue</Text>
-                  <ArrowRight size={18} color={colors.primaryForeground} />
-                </Button>
-              </View>
-            ) : null}
-
-            {step === "code" ? (
-              <View className="gap-5">
-                <View className="gap-2">
-                  <Label className="text-xs text-muted-foreground">Verification code</Label>
-                  <Input
-                    placeholder="123456"
-                    keyboardType="number-pad"
-                    value={code}
-                    onChangeText={setCode}
-                    autoFocus
-                    maxLength={6}
-                    className="text-center text-xl font-semibold"
-                  />
-                </View>
-                <Button loading={loading} onPress={onVerify} disabled={!code.trim()}>
-                  <Text>Verify code</Text>
-                  <ArrowRight size={18} color={colors.primaryForeground} />
-                </Button>
-              </View>
-            ) : null}
-
-            {step === "unlock" ? (
-              <View className="gap-5">
-                <View className="gap-2">
-                  <Label className="text-xs text-muted-foreground">Master password</Label>
-                  <Input
-                    placeholder="Enter your master password"
-                    secureTextEntry
-                    value={master}
-                    onChangeText={setMaster}
-                    autoFocus
-                    returnKeyType="go"
-                    onSubmitEditing={onUnlock}
-                  />
-                </View>
-                <Button loading={loading} onPress={onUnlock} disabled={!master}>
-                  <LockKeyhole size={18} color={colors.primaryForeground} />
-                  <Text>Unlock vault</Text>
-                </Button>
-              </View>
-            ) : null}
-          </FadeIn>
-        </View>
-
-        <View className="flex-row items-center justify-center gap-2 pb-4">
-          <ShieldCheck size={14} color={colors.mutedForeground} />
-          <Text className="text-xs text-muted-foreground">Encrypted on this device</Text>
-        </View>
+          <View className="mb-8 mt-5 flex-row gap-1.5" accessibilityLabel={`Étape ${stepIndex[step] + 1} sur 3`}>
+            {[0, 1, 2].map(index => <View key={index} className={`h-1 flex-1 rounded-full ${index <= stepIndex[step] ? "bg-primary" : "bg-border"}`} />)}
+          </View>
+          <Text accessibilityRole="header" className="text-[32px] font-semibold leading-10">{titles[step]}</Text>
+          <Text className="mb-8 mt-3 text-sm leading-6 text-muted-foreground">{descriptions[step]}</Text>
+          <View className="gap-3">
+            <Label>{step === "email" ? "Adresse e-mail" : step === "code" ? "Code à 6 chiffres" : "Mot de passe maître"}</Label>
+            {step === "email" ? <Input accessibilityLabel="Adresse e-mail" placeholder="nom@exemple.fr" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} editable={!loading} returnKeyType="go" onSubmitEditing={onSend} /> : step === "code" ? <Input accessibilityLabel="Code de vérification" placeholder="000000" keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" value={code} onChangeText={value => setCode(value.replace(/[^0-9]/g, ""))} maxLength={6} editable={!loading} className="text-xl tracking-[6px]" /> : <Input accessibilityLabel="Mot de passe maître" placeholder="Votre mot de passe maître" secureTextEntry autoComplete="off" value={master} onChangeText={setMaster} editable={!loading} returnKeyType="go" onSubmitEditing={onUnlock} />}
+            <Button className="mt-3" loading={loading} disabled={step === "email" ? !email.trim() : step === "code" ? code.length !== 6 : !master} onPress={step === "email" ? onSend : step === "code" ? onVerify : onUnlock}>
+              <Text>{step === "email" ? "Recevoir un code" : step === "code" ? "Vérifier le code" : "Ouvrir le coffre"}</Text>
+            </Button>
+            {step === "code" ? <Button variant="ghost" disabled={loading} onPress={async () => {
+              setLoading(true);
+              try { await sendCode(email.trim()); Alert.alert("Code envoyé", "Consultez votre boîte e-mail."); }
+              catch { Alert.alert("Erreur", "Impossible de renvoyer le code."); }
+              finally { setLoading(false); }
+            }}><Text>Renvoyer le code</Text></Button> : null}
+          </View>
+          <Text className="mt-6 text-xs leading-5 text-muted-foreground">{step === "unlock" ? "Vaultix ne peut pas retrouver votre mot de passe maître." : "Votre mot de passe maître ne quitte jamais votre appareil."}</Text>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

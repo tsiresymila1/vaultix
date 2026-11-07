@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { colors } from "@/lib/theme";
 
 const buttonVariants = cva(
-  "flex-row items-center justify-center gap-2 rounded-md active:opacity-75",
+  "flex-row items-center justify-center gap-2 rounded-full active:opacity-75",
   {
     variants: {
       variant: {
@@ -18,7 +18,7 @@ const buttonVariants = cva(
         ghost: "bg-transparent",
       },
       size: {
-        default: "h-[50px] px-5",
+        default: "h-[52px] px-5",
         sm: "h-9 px-3",
         lg: "h-14 px-7",
         icon: "h-11 w-11",

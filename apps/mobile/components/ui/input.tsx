@@ -1,5 +1,5 @@
 import * as React from "react";
-import { TextInput } from "react-native";
+import { TextInput, Platform } from "react-native";
 import { cn } from "@/lib/utils";
 import { colors } from "@/lib/theme";
 
@@ -7,16 +7,18 @@ import { colors } from "@/lib/theme";
 function Input({
   className,
   placeholderTextColor,
+  style,
   ...props
 }: React.ComponentProps<typeof TextInput>) {
   return (
     <TextInput
       placeholderTextColor={placeholderTextColor ?? colors.mutedForeground}
       className={cn(
-        "h-[50px] rounded-md border border-border bg-input px-4 text-base text-foreground font-sans",
+        "h-[52px] rounded-t-xl border-b border-muted-foreground bg-input px-4 text-base text-foreground font-sans",
         props.editable === false && "opacity-50",
         className,
       )}
+      style={[{ fontFamily: Platform.OS === "ios" ? "System" : "sans-serif" }, style]}
       {...props}
     />
   );
