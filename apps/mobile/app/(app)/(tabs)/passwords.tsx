@@ -1,5 +1,6 @@
+import { useMaterialDialog } from "@/components/material-dialog";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, SectionList, Pressable, View } from "react-native";
+import { ActivityIndicator, RefreshControl, SectionList, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { KeyRound, Plus, Search } from "lucide-react-native";
@@ -15,7 +16,10 @@ import { colors } from "@/lib/theme";
 type Filter = "all" | "favorites" | "shared";
 
 export default function Passwords() {
-  const { entries, loading, error } = usePasswords();
+  const dialog = useMaterialDialog();
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => { setRefreshing(true); try { await refresh(); } catch { dialog.alert("Actualisation impossible", "Vérifiez votre connexion et réessayez."); } finally { setRefreshing(false); } };
+  const { entries, loading, error, refresh } = usePasswords();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const router = useRouter();
@@ -92,6 +96,7 @@ export default function Passwords() {
         </View>
       ) : (
         <SectionList
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
           sections={(query || filter !== "all" ? [{ title: "Identifiants", data: filtered }] : [
             { title: "Favoris", data: filtered.filter(entry => favorites.ids.includes(entry.id)) },
             { title: "Récents", data: filtered.filter(entry => !favorites.ids.includes(entry.id)) },

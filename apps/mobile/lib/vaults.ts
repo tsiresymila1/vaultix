@@ -37,6 +37,7 @@ export function useVaults() {
   );
 
   return {
+    refresh: async () => { await db.queryOnce({ vaults: { $: { order: { createdAt: "desc" } }, environments: {} } }); },
     vaults,
     loading: authLoading || isLoading,
     error: error ? messageFrom(error, "Failed to load vaults") : null,

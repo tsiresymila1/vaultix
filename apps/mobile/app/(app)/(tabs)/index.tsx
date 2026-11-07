@@ -1,4 +1,7 @@
-import { ActivityIndicator, ScrollView, View } from "react-native";
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import { useMaterialDialog } from "@/components/material-dialog";
+import { ActivityIndicator, RefreshControl, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Box } from "lucide-react-native";
 import { StaggerItem } from "@/components/motion";
@@ -8,11 +11,15 @@ import { colors } from "@/lib/theme";
 import { useVaults, type MobileVault } from "@/lib/vaults";
 
 export default function VaultixHome() {
-  const { vaults, loading, error } = useVaults();
+  const dialog = useMaterialDialog();
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => { setRefreshing(true); try { await refresh(); } catch { dialog.alert("Actualisation impossible", "Vérifiez votre connexion et réessayez."); } finally { setRefreshing(false); } };
+  const { vaults, loading, error, refresh } = useVaults();
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScrollView
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 24 }}
       >
@@ -51,11 +58,12 @@ export default function VaultixHome() {
 }
 
 function VaultRow({ vault, last }: { vault: MobileVault; last: boolean }) {
+  const router = useRouter();
   const visibleEnvironments = vault.environments.slice(0, 2);
   const remainingEnvironments = vault.environments.length - visibleEnvironments.length;
 
   return (
-    <View className={`min-h-[76px] flex-row items-center gap-3 py-3 ${last ? "" : "border-b border-border"}`}>
+    <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/(app)/project/[id]", params: { id: vault.id } })} className={`min-h-[76px] flex-row items-center gap-3 py-3 ${last ? "" : "border-b border-border"}`}>
       <View className="h-11 w-11 items-center justify-center">
         <Box size={24} color={colors.primary} />
       </View>
@@ -82,6 +90,6 @@ function VaultRow({ vault, last }: { vault: MobileVault; last: boolean }) {
         <Text className="text-sm font-semibold text-foreground">{vault.environments.length}</Text>
         <Text className="text-[10px] text-muted-foreground">env</Text>
       </View>
-    </View>
+    </Pressable>
   );
 }

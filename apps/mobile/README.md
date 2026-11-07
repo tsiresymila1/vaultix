@@ -154,3 +154,20 @@ Entry icons use local key glyphs so a third-party favicon service never receives
 private vault domains. Autofill activation remains under Réglages. Existing
 password creation, editing, decryption, copying, deletion and shared-entry access
 continue to use the real backend.
+
+## Unlocking and Android downloads
+
+Email + verification code completes sign-in. Opening a password entry (or its
+create/edit route) opens a custom Material dialog for the password-vault master
+password. The decrypted key is reused in memory for this app session; only the
+auth token and encrypted key material persist. Upgrading from the old persisted
+unlocked session requires signing in again. Signing out clears the autofill cache.
+Project secrets use the separate identity key, as on the web; their detail screen
+lists environments and allows revealing/copying individual variables.
+
+The release now provides one signed APK per ABI, plus `SHA256SUMS`. Most current
+Android phones use `android-arm64-v8a.apk`; older 32-bit devices use
+`android-armeabi-v7a.apk`, and x86/x86_64 files are for matching devices/emulators.
+Native libraries use compressed packaging. This reduces each download compared
+with the former universal 113 MB APK without dropping architecture support.
+Exact output sizes must be checked after building the new release.

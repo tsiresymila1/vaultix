@@ -1,5 +1,6 @@
+import { useMaterialDialog } from "@/components/material-dialog";
 import { useEffect, useState } from "react";
-import { AppState, Platform, Alert, Pressable, ScrollView, View } from "react-native";
+import { AppState, Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ChevronRight, KeyRound, LogOut, ShieldCheck, Smartphone } from "lucide-react-native";
@@ -12,6 +13,7 @@ import { useAuth } from "@/lib/auth";
 import { colors } from "@/lib/theme";
 
 export default function Settings() {
+  const dialog = useMaterialDialog();
   const { session, signOut } = useAuth();
   const router = useRouter();
   const email = session?.email || "Vaultix user";
@@ -27,7 +29,7 @@ export default function Settings() {
   }, []);
 
   const onSignOut = () => {
-    Alert.alert("Sign out?", "Your decrypted session and local autofill data will be cleared.", [
+    dialog.alert("Sign out?", "Your decrypted session and local autofill data will be cleared.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Sign out",
@@ -66,9 +68,9 @@ export default function Settings() {
               status={autofillSupported ? (enabled ? "Activé" : "Configurer") : undefined}
               onPress={autofillSupported ? () => {
                 if (Platform.OS === "android") {
-                  try { openAutofillSettings(); } catch { Alert.alert("Autofill", "Open Android Settings → Autofill service → Vaultix."); }
+                  try { openAutofillSettings(); } catch { dialog.alert("Autofill", "Open Android Settings → Autofill service → Vaultix."); }
                 } else {
-                  Alert.alert("Autofill", "Enable Vaultix in Settings → Passwords → Password Options (or General → AutoFill & Passwords).");
+                  dialog.alert("Autofill", "Enable Vaultix in Settings → Passwords → Password Options (or General → AutoFill & Passwords).");
                 }
               } : undefined}
             />

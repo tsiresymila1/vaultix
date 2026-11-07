@@ -94,6 +94,14 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
+    splits {
+        abi {
+            enable gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
+            reset()
+            include 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+            universalApk false
+        }
+    }
     namespace 'ts.mila.vaultix'
     defaultConfig {
         applicationId 'ts.mila.vaultix'

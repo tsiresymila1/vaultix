@@ -1,5 +1,6 @@
+import { useMaterialDialog } from "@/components/material-dialog";
 import { useState } from "react";
-import { Alert, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Save } from "lucide-react-native";
@@ -14,6 +15,7 @@ import { createPassword } from "@/lib/passwords";
 import { colors } from "@/lib/theme";
 
 export default function NewPassword() {
+  const dialog = useMaterialDialog();
   const { session } = useAuth();
   const router = useRouter();
   const [title, setTitle] = useState("");
@@ -31,7 +33,7 @@ export default function NewPassword() {
 
   const onSave = async () => {
     if (!title.trim() || !password) {
-      Alert.alert("Missing information", "Title and password are required.");
+      dialog.alert("Missing information", "Title and password are required.");
       return;
     }
     if (!session) return;
@@ -46,7 +48,7 @@ export default function NewPassword() {
       });
       router.back();
     } catch {
-      Alert.alert("Error", "Failed to save password.");
+      dialog.alert("Error", "Failed to save password.");
     } finally {
       setSaving(false);
     }

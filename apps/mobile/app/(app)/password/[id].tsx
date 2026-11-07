@@ -1,7 +1,7 @@
+import { useMaterialDialog } from "@/components/material-dialog";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -30,6 +30,7 @@ import { FadeIn } from "@/components/motion";
 import { colors } from "@/lib/theme";
 
 export default function PasswordDetail() {
+  const dialog = useMaterialDialog();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { entries, loading } = usePasswords();
   const { session } = useAuth();
@@ -55,7 +56,7 @@ export default function PasswordDetail() {
       setPassword(decrypted);
       return decrypted;
     } catch {
-      Alert.alert("Error", "Failed to decrypt this password.");
+      dialog.alert("Error", "Failed to decrypt this password.");
       return null;
     } finally {
       setRevealing(false);
@@ -73,7 +74,7 @@ export default function PasswordDetail() {
   const copy = async (value: string | null | undefined, label: string) => {
     if (!value) return;
     await Clipboard.setStringAsync(value);
-    Alert.alert("Copied", `${label} copied to clipboard.`);
+    dialog.alert("Copied", `${label} copied to clipboard.`);
   };
 
   const copyPassword = async () => {
@@ -90,13 +91,13 @@ export default function PasswordDetail() {
     try {
       await Linking.openURL(url);
     } catch {
-      Alert.alert("Can't open website", "Check that the website address is valid.");
+      dialog.alert("Can't open website", "Check that the website address is valid.");
     }
   };
 
   const onDelete = () => {
     if (!entry || !session) return;
-    Alert.alert("Delete password?", `\"${entry.title}\" will be permanently removed.`, [
+    dialog.alert("Delete password?", `\"${entry.title}\" will be permanently removed.`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
@@ -106,7 +107,7 @@ export default function PasswordDetail() {
             await deletePassword(session, entry.id);
             router.back();
           } catch {
-            Alert.alert("Error", "Failed to delete this password.");
+            dialog.alert("Error", "Failed to delete this password.");
           }
         },
       },

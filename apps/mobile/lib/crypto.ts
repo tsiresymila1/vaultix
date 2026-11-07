@@ -18,12 +18,12 @@ async function s() {
 export async function deriveMasterKey(password: string, saltBase64: string): Promise<Uint8Array> {
   const lib = await s();
   return lib.crypto_pwhash(
-    lib.crypto_secretbox_KEYBYTES,
+    32,
     password,
-    lib.from_base64(saltBase64),
-    lib.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-    lib.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-    lib.crypto_pwhash_ALG_ARGON2ID13,
+    decode(lib, saltBase64),
+    2,
+    67108864,
+    2,
   );
 }
 
@@ -35,8 +35,8 @@ export async function decryptPrivateKey(
 ): Promise<string> {
   const lib = await s();
   const priv = lib.crypto_secretbox_open_easy(
-    lib.from_base64(cipherBase64),
-    lib.from_base64(nonceBase64),
+    decode(lib, cipherBase64),
+    decode(lib, nonceBase64),
     masterKey,
   );
   return lib.to_base64(priv);
@@ -70,7 +70,7 @@ export async function encryptSecret(
     null,
     null,
     nonce,
-    lib.from_base64(keyBase64),
+    decode(lib, keyBase64),
   );
   return { cipher: lib.to_base64(cipher), nonce: lib.to_base64(nonce) };
 }
@@ -79,7 +79,7 @@ export async function encryptSecret(
 export async function sealKey(keyBase64: string, publicKeyBase64: string): Promise<string> {
   const lib = await s();
   return lib.to_base64(
-    lib.crypto_box_seal(lib.from_base64(keyBase64), lib.from_base64(publicKeyBase64)),
+    lib.crypto_box_seal(decode(lib, keyBase64), decode(lib, publicKeyBase64)),
   );
 }
 
@@ -91,9 +91,9 @@ export async function unsealKey(
 ): Promise<string> {
   const lib = await s();
   const opened = lib.crypto_box_seal_open(
-    lib.from_base64(sealedBase64),
-    lib.from_base64(publicKeyBase64),
-    lib.from_base64(privateKeyBase64),
+    decode(lib, sealedBase64),
+    decode(lib, publicKeyBase64),
+    decode(lib, privateKeyBase64),
   );
   return lib.to_base64(opened);
 }
@@ -107,10 +107,14 @@ export async function decryptSecret(
   const lib = await s();
   const plain = lib.crypto_aead_xchacha20poly1305_ietf_decrypt(
     null,
-    lib.from_base64(cipherBase64),
+    decode(lib, cipherBase64),
     null,
-    lib.from_base64(nonceBase64),
-    lib.from_base64(keyBase64),
+    decode(lib, nonceBase64),
+    decode(lib, keyBase64),
   );
   return lib.to_string(plain);
+}
+
+function decode(lib: typeof sodium, value: string): Uint8Array {
+  return lib.from_base64(value.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""), lib.base64_variants.URLSAFE_NO_PADDING);
 }

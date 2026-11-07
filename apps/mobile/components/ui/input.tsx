@@ -1,5 +1,5 @@
 import * as React from "react";
-import { TextInput, Platform } from "react-native";
+import { TextInput } from "react-native";
 import { cn } from "@/lib/utils";
 import { colors } from "@/lib/theme";
 
@@ -18,7 +18,7 @@ function Input({
         props.editable === false && "opacity-50",
         className,
       )}
-      style={[{ fontFamily: Platform.OS === "ios" ? "System" : "sans-serif" }, style]}
+      style={[{ fontFamily: "Poppins_400Regular" }, style]}
       {...props}
     />
   );

@@ -1,12 +1,12 @@
 import * as React from "react";
-import { Text as RNText, Platform } from "react-native";
+import { Text as RNText } from "react-native";
 import { Slot } from "@rn-primitives/slot";
 import { cn } from "@/lib/utils";
 
 const TextClassContext = React.createContext<string | undefined>(undefined);
 
 // react-native-reusables Text: pulls a class from context (e.g. Button injects its
-// text color) and uses the platform sans-serif font.
+// text color) and uses Poppins consistently.
 function Text({
   className,
   asChild = false,
@@ -18,7 +18,7 @@ function Text({
   return (
     <Component
       className={cn("text-base text-foreground font-sans", textClass, className)}
-      style={[{ fontFamily: Platform.OS === "ios" ? "System" : "sans-serif" }, style]}
+      style={[{ fontFamily: /font-bold/.test(className ?? "") ? "Poppins_700Bold" : /font-semibold/.test(`${textClass} ${className}`) ? "Poppins_600SemiBold" : /font-medium/.test(className ?? "") ? "Poppins_500Medium" : "Poppins_400Regular" }, style]}
       {...props}
     />
   );

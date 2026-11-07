@@ -69,6 +69,7 @@ export function usePasswords() {
   const queryError = profileError ?? ownedError ?? sharedError;
 
   return {
+    refresh: async () => { if (!profileId) return; await db.queryOnce({ passwordEntries: { $: { where: { "owner.id": profileId } } }, passwordShares: { $: { where: { "recipient.id": profileId } }, entry: {} } }); },
     entries,
     loading: authLoading || profileLoading || (Boolean(profileId) && (ownedLoading || sharedLoading)),
     error: queryError instanceof Error ? queryError.message : queryError ? "Failed to load passwords" : null,

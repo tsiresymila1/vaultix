@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useRef } from "react";
 import { db } from "./instant";
 import { api, bearer } from "./api";
 import { deriveMasterKey, decryptPrivateKey } from "./crypto";
 import { saveSession, loadSession, clearSession, type Session } from "./session";
+import { UnlockDialog } from "@/components/unlock-dialog";
 import { clearAutofill } from "./autofill";
 
 // The password vault is zero-knowledge: after magic-code login the server hands
@@ -18,7 +19,7 @@ interface Pending {
 }
 
 interface AuthContextType {
-  session: Session | null; // unlocked
+  session: Session | null; // authenticated; pwPrivateKey is empty until requested
   pending: Pending | null; // authenticated, awaiting master password
   ready: boolean;
   sendCode: (email: string) => Promise<void>;
@@ -26,6 +27,7 @@ interface AuthContextType {
   verifyCode: (email: string, code: string) => Promise<{ needsSetup: boolean }>;
   unlock: (masterPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
+  requestUnlock: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -35,9 +37,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [ready, setReady] = useState(false);
 
+  const [unlockVisible, setUnlockVisible] = useState(false);
+  const epoch = useRef(0);
+  const waiting = useRef<Array<(value: boolean) => void>>([]);
+  const completeUnlock = (value: boolean) => { setUnlockVisible(false); waiting.current.splice(0).forEach(resolve => resolve(value)); };
+  const requestUnlock = () => session?.pwPrivateKey ? Promise.resolve(true) : new Promise<boolean>(resolve => { waiting.current.push(resolve); setUnlockVisible(true); });
+
   useEffect(() => {
+    clearAutofill();
     loadSession()
-      .then(setSession)
+      .then(value => { setSession(value); if (value?.pwSalt && value.pwEncryptedPrivateKey && value.pwPrivateKeyNonce) setPending(value as Pending); })
+      .catch(() => setSession(null))
       .finally(() => setReady(true));
   }, []);
 
@@ -62,40 +72,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const u = me.user;
     if (!u.pw_public_key || !u.pw_encrypted_private_key || !u.pw_private_key_nonce || !u.pw_salt) {
-      // Vault not set up yet — needs a master password set on the web app.
+      const authenticated: Session = { token: mint.token, email: u.email, pwPublicKey: u.pw_public_key ?? "", pwPrivateKey: "" };
+      await saveSession(authenticated);
+      setSession(authenticated);
+      setPending(null);
       return { needsSetup: true };
     }
-    setPending({
+    const metadata: Pending = {
       token: mint.token,
       email: u.email,
       pwPublicKey: u.pw_public_key,
       pwEncryptedPrivateKey: u.pw_encrypted_private_key,
       pwPrivateKeyNonce: u.pw_private_key_nonce,
       pwSalt: u.pw_salt,
-    });
+    };
+    const authenticated: Session = { ...metadata, pwPrivateKey: "" };
+    await saveSession(authenticated);
+    setPending(metadata);
+    setSession(authenticated);
     return { needsSetup: false };
   };
 
   const unlock = async (masterPassword: string) => {
-    if (!pending) throw new Error("Nothing to unlock");
-    const masterKey = await deriveMasterKey(masterPassword, pending.pwSalt);
-    const pwPrivateKey = await decryptPrivateKey(
-      pending.pwEncryptedPrivateKey,
-      pending.pwPrivateKeyNonce,
-      masterKey,
-    );
-    const next: Session = {
-      token: pending.token,
-      email: pending.email,
-      pwPublicKey: pending.pwPublicKey,
-      pwPrivateKey,
-    };
+    if (!pending) throw new Error("Configurez le coffre d’identifiants sur le web avant de le déverrouiller.");
+    const generation = epoch.current;
+    const response = await api.extension.me.$get({}, { headers: bearer(pending.token) });
+    const body = await response.json();
+    if (!response.ok || !("user" in body)) throw new Error("Reconnectez-vous pour actualiser votre coffre.");
+    const user = body.user;
+    if (!user.pw_salt || !user.pw_encrypted_private_key || !user.pw_private_key_nonce || !user.pw_public_key) throw new Error("Configurez votre coffre d’identifiants sur le web.");
+    const material: Pending = { ...pending, pwSalt: user.pw_salt, pwEncryptedPrivateKey: user.pw_encrypted_private_key, pwPrivateKeyNonce: user.pw_private_key_nonce, pwPublicKey: user.pw_public_key };
+    const masterKey = await deriveMasterKey(masterPassword, material.pwSalt);
+    let pwPrivateKey: string;
+    try {
+      pwPrivateKey = await decryptPrivateKey(material.pwEncryptedPrivateKey, material.pwPrivateKeyNonce, masterKey);
+    } finally { masterKey.fill(0); }
+    if (epoch.current !== generation) throw new Error("Session terminée");
+    const next: Session = { ...material, pwPrivateKey };
     await saveSession(next);
+    if (epoch.current !== generation) return;
+    setPending(material);
     setSession(next);
-    setPending(null);
+    completeUnlock(true);
   };
 
   const signOut = async () => {
+    epoch.current++;
+    completeUnlock(false);
     clearAutofill();
     await clearSession();
     setSession(null);
@@ -109,9 +132,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, pending, ready, sendCode, verifyCode, unlock, signOut }}
+      value={{ session, pending, ready, sendCode, verifyCode, unlock, signOut, requestUnlock }}
     >
       {children}
+      <UnlockDialog visible={unlockVisible} onCancel={() => completeUnlock(false)} onUnlock={unlock} />
     </AuthContext.Provider>
   );
 }

@@ -1,5 +1,6 @@
+import { useMaterialDialog } from "@/components/material-dialog";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, View } from "react-native";
+import { ActivityIndicator, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Save } from "lucide-react-native";
@@ -14,6 +15,7 @@ import { updatePassword, usePasswords } from "@/lib/passwords";
 import { colors } from "@/lib/theme";
 
 export default function EditPassword() {
+  const dialog = useMaterialDialog();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session } = useAuth();
   const { entries, loading } = usePasswords();
@@ -47,7 +49,7 @@ export default function EditPassword() {
   const onSave = async () => {
     if (!entry || !session) return;
     if (!title.trim()) {
-      Alert.alert("Missing information", "Title is required.");
+      dialog.alert("Missing information", "Title is required.");
       return;
     }
     setSaving(true);
@@ -61,7 +63,7 @@ export default function EditPassword() {
       });
       router.back();
     } catch {
-      Alert.alert("Error", "Failed to update password.");
+      dialog.alert("Error", "Failed to update password.");
     } finally {
       setSaving(false);
     }
