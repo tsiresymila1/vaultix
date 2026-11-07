@@ -4,6 +4,6 @@
     "modules": ["VaultixAutofillModule"]
   },
   "android": {
-    "modules": ["com.vaultix.autofill.VaultixAutofillModule"]
+    "modules": ["ts.mila.vaultix.autofill.VaultixAutofillModule"]
   }
 }

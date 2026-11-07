@@ -1,38 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from "react-native";
+import { useMemo, useState } from "react";
+import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { KeyRound, Plus, Search } from "lucide-react-native";
 import { StaggerItem } from "@/components/motion";
 import { PasswordListItem } from "@/components/password-list-item";
 import { ScreenHeader } from "@/components/screen-header";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
-import { syncAutofill } from "@/lib/autofill";
-import { useAuth } from "@/lib/auth";
 import { usePasswords } from "@/lib/passwords";
 import { colors } from "@/lib/theme";
 
 type Filter = "all" | "personal" | "shared";
 
 export default function Passwords() {
-  const { entries, loading, error, refresh } = usePasswords();
-  const { session } = useAuth();
+  const { entries, loading, error } = usePasswords();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const router = useRouter();
-
-  useEffect(() => {
-    if (session && entries.length > 0) {
-      syncAutofill(entries, session.pwPublicKey, session.pwPrivateKey).catch(() => {});
-    }
-  }, [entries, session]);
-
-  useFocusEffect(
-    useCallback(() => {
-      refresh();
-    }, [refresh]),
-  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -108,7 +93,6 @@ export default function Passwords() {
           keyExtractor={(entry) => entry.id}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 104 }}
           keyboardShouldPersistTaps="handled"
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.primary} />}
           ListEmptyComponent={
             <View className="items-center py-20">
               <View className="h-14 w-14 items-center justify-center rounded-md border border-border bg-card">

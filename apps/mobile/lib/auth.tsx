@@ -3,7 +3,7 @@ import { db } from "./instant";
 import { api, bearer } from "./api";
 import { deriveMasterKey, decryptPrivateKey } from "./crypto";
 import { saveSession, loadSession, clearSession, type Session } from "./session";
-import { clearCredentials } from "./autofill";
+import { clearAutofill } from "./autofill";
 
 // The password vault is zero-knowledge: after magic-code login the server hands
 // back the vault's ENCRYPTED private key + salt; the user enters their master
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    clearCredentials();
+    clearAutofill();
     await clearSession();
     setSession(null);
     setPending(null);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import {
   ChevronLeft,
@@ -31,20 +31,19 @@ import { colors } from "@/lib/theme";
 
 export default function PasswordDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { entries, loading, refresh } = usePasswords();
+  const { entries, loading } = usePasswords();
   const { session } = useAuth();
   const router = useRouter();
-
-  useFocusEffect(
-    useCallback(() => {
-      refresh();
-    }, [refresh]),
-  );
 
   const entry = entries.find((item) => item.id === id) as PasswordEntry | undefined;
   const [password, setPassword] = useState<string | null>(null);
   const [revealing, setRevealing] = useState(false);
   const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    setPassword(null);
+    setVisible(false);
+  }, [entry?.encrypted_password, entry?.password_nonce, entry?.sealed_key]);
 
   const ensureDecrypted = async (): Promise<string | null> => {
     if (password) return password;

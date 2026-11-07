@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useMemo } from "react";
 import { api, bearer } from "./api";
 import { unsealKey, decryptSecret, generateEntryKey, encryptSecret, sealKey } from "./crypto";
 import { useAuth } from "./auth";
+import { db } from "./instant";
 import type { Session } from "./session";
 
 export interface PasswordEntry {
@@ -23,34 +24,87 @@ export interface PasswordEntry {
  *  until you decrypt an entry on demand. */
 export function usePasswords() {
   const { session } = useAuth();
-  const [entries, setEntries] = useState<PasswordEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user, isLoading: authLoading } = db.useAuth();
+  const { data: profileData, isLoading: profileLoading, error: profileError } = db.useQuery(
+    session && user
+      ? { profiles: { $: { where: { "$user.id": user.id } } } }
+      : null,
+  );
+  const profileId = profileData?.profiles[0]?.id;
 
-  const refresh = useCallback(async () => {
-    if (!session) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await api.extension.passwords.$get(
-        {},
-        { headers: bearer(session.token) },
-      );
-      const body = await res.json();
-      if (!res.ok || !("passwords" in body)) throw new Error("Failed to load");
-      setEntries(body.passwords as PasswordEntry[]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load passwords");
-    } finally {
-      setLoading(false);
-    }
-  }, [session]);
+  const { data: ownedData, isLoading: ownedLoading, error: ownedError } = db.useQuery(
+    profileId
+      ? {
+          passwordEntries: {
+            $: { where: { "owner.id": profileId }, order: { createdAt: "desc" } },
+          },
+        }
+      : null,
+  );
+  const { data: sharedData, isLoading: sharedLoading, error: sharedError } = db.useQuery(
+    profileId
+      ? {
+          passwordShares: {
+            $: { where: { "recipient.id": profileId }, order: { createdAt: "desc" } },
+            entry: {},
+          },
+        }
+      : null,
+  );
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  const entries = useMemo<PasswordEntry[]>(() => {
+    const owned = (ownedData?.passwordEntries ?? []).map((entry) =>
+      toPasswordEntry(entry, entry.ownerEncryptedKey, false),
+    );
+    const shared = (sharedData?.passwordShares ?? []).flatMap((share) => {
+      const entry = Array.isArray(share.entry) ? share.entry[0] : share.entry;
+      return entry ? [toPasswordEntry(entry, share.encryptedKey, true)] : [];
+    });
 
-  return { entries, loading, error, refresh };
+    return [...owned, ...shared].sort(
+      (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+    );
+  }, [ownedData?.passwordEntries, sharedData?.passwordShares]);
+
+  const queryError = profileError ?? ownedError ?? sharedError;
+
+  return {
+    entries,
+    loading: authLoading || profileLoading || (Boolean(profileId) && (ownedLoading || sharedLoading)),
+    error: queryError instanceof Error ? queryError.message : queryError ? "Failed to load passwords" : null,
+  };
+}
+
+function toPasswordEntry(
+  entry: {
+    id: string;
+    title: string;
+    websiteUrl?: string;
+    username?: string;
+    encryptedPassword: string;
+    passwordNonce: string;
+    encryptedOtpSeed?: string;
+    otpNonce?: string;
+    notes?: string;
+    createdAt: number | string;
+  },
+  sealedKey: string,
+  shared: boolean,
+): PasswordEntry {
+  return {
+    id: entry.id,
+    title: entry.title,
+    website_url: entry.websiteUrl ?? null,
+    username: entry.username ?? null,
+    encrypted_password: entry.encryptedPassword,
+    password_nonce: entry.passwordNonce,
+    encrypted_otp_seed: entry.encryptedOtpSeed ?? null,
+    otp_nonce: entry.otpNonce ?? null,
+    notes: entry.notes ?? null,
+    sealed_key: sealedKey,
+    shared,
+    created_at: entry.createdAt,
+  };
 }
 
 /** Create a new password entry: fresh entry key → encrypt content → seal the key

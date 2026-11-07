@@ -1,4 +1,4 @@
-name: Release CLI
+name: Release Vaultix
 
 on:
   push:
@@ -11,27 +11,31 @@ on:
         required: true
 
 permissions:
+  actions: read
   contents: write
 
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
-  build-and-release:
+  build-cli:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # On manual dispatch, check out the requested tag; on push, the tag ref.
           ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 10.34.4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -43,15 +47,135 @@ jobs:
       - name: Package CLI binaries
         run: pnpm --filter=@vaultix/cli pkg
 
-      - name: Create Release
-        id: create_release
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vaultix-cli-${{ github.event.inputs.tag || github.ref_name }}
+          path: apps/cli/bin/vaultix-*
+          if-no-files-found: error
+          retention-days: 14
+
+  build-android:
+    runs-on: ubuntu-latest
+    env:
+      EXPO_PUBLIC_INSTANT_APP_ID: ${{ vars.EXPO_PUBLIC_INSTANT_APP_ID }}
+      EXPO_PUBLIC_VAULTIX_URL: ${{ vars.EXPO_PUBLIC_VAULTIX_URL }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      VAULTIX_VERSION_CODE: ${{ github.run_number }}
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate Android release configuration
+        shell: bash
+        run: |
+          required=(
+            EXPO_PUBLIC_INSTANT_APP_ID
+            EXPO_PUBLIC_VAULTIX_URL
+            ANDROID_KEYSTORE_BASE64
+            ANDROID_KEYSTORE_PASSWORD
+            ANDROID_KEY_ALIAS
+            ANDROID_KEY_PASSWORD
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name}" ]; then
+              echo "Missing GitHub Actions configuration: ${name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Configure Android signing and version
+        shell: bash
+        run: |
+          keystore_path="${RUNNER_TEMP}/vaultix-release.keystore"
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${keystore_path}"
+          echo "ANDROID_KEYSTORE_PATH=${keystore_path}" >> "${GITHUB_ENV}"
+          echo "VAULTIX_VERSION_NAME=${RELEASE_TAG#v}" >> "${GITHUB_ENV}"
+          echo "APK_NAME=vaultix-${RELEASE_TAG#v}-android.apk" >> "${GITHUB_ENV}"
+
+      - name: Build shared packages
+        run: pnpm build --filter=@vaultix/mobile
+
+      - name: Test autofill
+        run: node --test apps/mobile/tests/*.test.cjs
+
+      - name: Typecheck mobile app
+        run: pnpm --filter=@vaultix/mobile typecheck
+
+      - name: Build signed Android APK
+        run: pnpm --filter=@vaultix/mobile build:android:apk
+
+      - name: Verify APK signature
+        shell: bash
+        run: |
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Prepare APK artifact
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "release-assets/${APK_NAME}"
+          (cd release-assets && sha256sum "${APK_NAME}" > "${APK_NAME}.sha256")
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vaultix-android-${{ github.event.inputs.tag || github.ref_name }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-release:
+    needs: [build-cli, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          files: |
-            apps/cli/bin/vaultix-*
+          fail_on_unmatched_files: true
+          files: release-assets/*
           draft: false
           prerelease: false
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

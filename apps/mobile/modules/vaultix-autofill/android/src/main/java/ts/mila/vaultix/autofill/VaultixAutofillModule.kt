@@ -1,4 +1,4 @@
-package com.vaultix.autofill
+package ts.mila.vaultix.autofill
 
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
@@ -24,7 +24,20 @@ class VaultixAutofillModule : Module() {
     }
 
     Function("isSupported") {
-      android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
+      appContext.reactContext?.getSystemService(android.view.autofill.AutofillManager::class.java)?.isAutofillSupported == true
+    }
+
+    Function("isEnabled") {
+      appContext.reactContext?.getSystemService(android.view.autofill.AutofillManager::class.java)?.hasEnabledAutofillServices() == true
+    }
+
+    Function("openSettings") {
+      val ctx = appContext.reactContext ?: throw IllegalStateException("No context")
+      val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE).apply {
+        data = android.net.Uri.parse("package:${ctx.packageName}")
+        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      ctx.startActivity(intent)
     }
   }
 

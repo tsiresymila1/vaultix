@@ -44,7 +44,14 @@ class VaultixAutofillService : AutofillService() {
       return
     }
 
-    val creds = loadCredentials()
+    val creds = loadCredentials().filter { c ->
+      val domain = c.domain.lowercase().trimEnd('.')
+      if (domain.startsWith("androidapp://")) {
+        fields.webDomains.isEmpty() && domain.removePrefix("androidapp://") == structure.activityComponent.packageName
+      } else {
+        domain.isNotEmpty() && fields.webDomains.any { it == domain }
+      }
+    }
     if (creds.isEmpty()) {
       callback.onSuccess(null)
       return
@@ -70,7 +77,11 @@ class VaultixAutofillService : AutofillService() {
     callback.onSuccess()
   }
 
-  private data class Fields(var usernameId: AutofillId?, var passwordId: AutofillId?)
+  private data class Fields(
+    var usernameId: AutofillId?,
+    var passwordId: AutofillId?,
+    val webDomains: MutableSet<String> = mutableSetOf(),
+  )
 
   private fun parseFields(structure: AssistStructure): Fields {
     val fields = Fields(null, null)
@@ -81,12 +92,19 @@ class VaultixAutofillService : AutofillService() {
   }
 
   private fun traverse(node: AssistStructure.ViewNode, fields: Fields) {
+    node.webDomain?.let { fields.webDomains.add(it.lowercase().trimEnd('.')) }
     val hints = node.autofillHints
     val id = node.autofillId
     if (id != null) {
       val hintStr = (hints?.joinToString(" ") ?: "").lowercase()
       val idEntry = (node.idEntry ?: "").lowercase()
-      val isPassword = node.inputType and android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD != 0 ||
+      val isPassword = (node.inputType and android.text.InputType.TYPE_MASK_CLASS == android.text.InputType.TYPE_CLASS_TEXT &&
+        node.inputType and android.text.InputType.TYPE_MASK_VARIATION in listOf(
+          android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD,
+          android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+          android.text.InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
+        )) || (node.inputType and android.text.InputType.TYPE_MASK_CLASS == android.text.InputType.TYPE_CLASS_NUMBER &&
+        node.inputType and android.text.InputType.TYPE_MASK_VARIATION == android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD) ||
         hintStr.contains("password") || idEntry.contains("password")
       val isUsername = hintStr.contains("username") || hintStr.contains("email") ||
         idEntry.contains("user") || idEntry.contains("email") || idEntry.contains("login")

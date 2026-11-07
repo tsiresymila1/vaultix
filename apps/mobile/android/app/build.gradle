@@ -3,6 +3,13 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+def releaseKeystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+def releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+def releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+def hasReleaseSigning = releaseKeystorePath && releaseKeystorePassword && releaseKeyAlias && releaseKeyPassword
+def vaultixVersionName = System.getenv("VAULTIX_VERSION_NAME") ?: "0.1.0"
+def vaultixVersionCode = Integer.parseInt(System.getenv("VAULTIX_VERSION_CODE") ?: "1")
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -92,8 +99,8 @@ android {
         applicationId 'ts.mila.vaultix'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "0.1.0"
+        versionCode vaultixVersionCode
+        versionName vaultixVersionName
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -104,15 +111,21 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseKeystorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds

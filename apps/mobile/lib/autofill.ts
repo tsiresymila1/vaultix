@@ -5,11 +5,15 @@ import type { PasswordEntry } from "./passwords";
 function domainOf(url: string | null): string {
   if (!url) return "";
   try {
-    return new URL(url.startsWith("http") ? url : `https://${url}`).hostname;
+    const parsed = new URL(url.includes("://") ? url : `https://${url}`);
+    if (parsed.protocol === "androidapp:") return `androidapp://${parsed.hostname}`;
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.hostname.toLowerCase().replace(/\.$/, "") : "";
   } catch {
-    return url;
+    return "";
   }
 }
+
+let generation = 0;
 
 /** Decrypt every entry and publish it to the OS-shared store so the native
  *  autofill provider can offer them. Call after the list loads / on unlock. */
@@ -18,6 +22,7 @@ export async function syncAutofill(
   pwPublicKey: string,
   pwPrivateKey: string,
 ): Promise<void> {
+  const current = ++generation;
   const creds: AutofillCredential[] = [];
   for (const e of entries) {
     try {
@@ -33,7 +38,14 @@ export async function syncAutofill(
       // skip entries we can't decrypt
     }
   }
-  saveCredentials(creds);
+  if (current === generation) saveCredentials(creds);
 }
 
-export { clearCredentials };
+export function clearAutofill() {
+  generation++;
+  clearCredentials();
+}
+
+export function cancelAutofillSync() {
+  generation++;
+}

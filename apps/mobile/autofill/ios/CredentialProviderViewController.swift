@@ -1,5 +1,6 @@
 import AuthenticationServices
 import UIKit
+import Security
 
 // AutoFill Credential Provider Extension. Reads the credential set the main app
 // wrote into the App Group store and offers matching logins in the QuickType bar
@@ -15,19 +16,23 @@ private struct Credential: Codable {
 }
 
 private func loadCredentials() -> [Credential] {
-  guard
-    let json = UserDefaults(suiteName: appGroup)?.string(forKey: credentialsKey),
-    let data = json.data(using: .utf8),
-    let creds = try? JSONDecoder().decode([Credential].self, from: data)
-  else { return [] }
+  guard let group = Bundle.main.object(forInfoDictionaryKey: "VaultixKeychainAccessGroup") as? String else { return [] }
+  let query: [CFString: Any] = [
+    kSecClass: kSecClassGenericPassword, kSecAttrService: credentialsKey,
+    kSecAttrAccessGroup: group, kSecReturnData: true, kSecMatchLimit: kSecMatchLimitOne,
+  ]
+  var result: CFTypeRef?
+  guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+        let data = result as? Data,
+        let creds = try? JSONDecoder().decode([Credential].self, from: data) else { return [] }
   return creds
 }
 
 private func matches(_ creds: [Credential], identifiers: [ASCredentialServiceIdentifier]) -> [Credential] {
   let hosts = identifiers.compactMap { URL(string: $0.identifier)?.host ?? $0.identifier }
-  if hosts.isEmpty { return creds }
+  if hosts.isEmpty { return [] }
   return creds.filter { c in
-    hosts.contains { host in host.contains(c.domain) || c.domain.contains(host) }
+    !c.domain.isEmpty && hosts.contains { host in host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".")) == c.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".")) }
   }
 }
 

@@ -16,6 +16,8 @@ const native = requireOptionalNativeModule<{
   save(json: string): void;
   clear(): void;
   isSupported(): boolean;
+  isEnabled?(): boolean | Promise<boolean>;
+  openSettings?(): void;
 }>("VaultixAutofill");
 
 /** Write the decrypted credential set to the OS-shared store for autofill. */
@@ -30,4 +32,12 @@ export function clearCredentials() {
 
 export function isAutofillSupported(): boolean {
   return native?.isSupported() ?? false;
+}
+
+export async function isAutofillEnabled(): Promise<boolean> {
+  return (await native?.isEnabled?.()) ?? false;
+}
+
+export function openAutofillSettings() {
+  native?.openSettings?.();
 }

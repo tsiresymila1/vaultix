@@ -2,11 +2,11 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 apply plugin: 'expo-module-gradle-plugin'
 
-group = 'com.vaultix.autofill'
+group = 'ts.mila.vaultix.autofill'
 version = '0.1.0'
 
 android {
-  namespace 'com.vaultix.autofill'
+  namespace 'ts.mila.vaultix.autofill'
   defaultConfig {
     minSdkVersion 26
     versionCode 1

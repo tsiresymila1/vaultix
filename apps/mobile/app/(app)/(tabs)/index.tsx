@@ -1,7 +1,6 @@
-import { useCallback } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { ArrowRight, Box, KeyRound, Layers3, ShieldCheck } from "lucide-react-native";
 import { Logo } from "@/components/Logo";
 import { FadeIn, StaggerItem } from "@/components/motion";
@@ -12,23 +11,16 @@ import { colors } from "@/lib/theme";
 import { useVaults, type MobileVault } from "@/lib/vaults";
 
 export default function VaultixHome() {
-  const { vaults, loading, error, refresh } = useVaults();
+  const { vaults, loading, error } = useVaults();
   const { session } = useAuth();
   const router = useRouter();
   const environmentCount = vaults.reduce((count, vault) => count + vault.environments.length, 0);
   const initial = session?.email?.slice(0, 1).toUpperCase() || "V";
 
-  useFocusEffect(
-    useCallback(() => {
-      refresh();
-    }, [refresh]),
-  );
-
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.primary} />}
         contentContainerStyle={{ paddingBottom: 104 }}
       >
         <View className="flex-row items-center justify-between px-5 pb-7 pt-2">
@@ -73,9 +65,6 @@ export default function VaultixHome() {
           ) : error ? (
             <View className="items-start rounded-md border border-destructive/30 bg-destructive/10 p-4">
               <Text className="text-sm text-destructive">{error}</Text>
-              <Pressable onPress={refresh} className="mt-3 py-1" hitSlop={6}>
-                <Text className="text-sm font-semibold text-foreground">Try again</Text>
-              </Pressable>
             </View>
           ) : vaults.length === 0 ? (
             <View className="items-center rounded-md border border-dashed border-border py-9">

@@ -1,4 +1,5 @@
-import { Alert, Pressable, ScrollView, View } from "react-native";
+import { useEffect, useState } from "react";
+import { AppState, Platform, Alert, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ChevronRight, KeyRound, LogOut, Mail, ShieldCheck, Smartphone } from "lucide-react-native";
@@ -6,7 +7,7 @@ import { FadeIn } from "@/components/motion";
 import { ScreenHeader, SectionHeader } from "@/components/screen-header";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { isAutofillSupported } from "@/modules/vaultix-autofill";
+import { isAutofillSupported, isAutofillEnabled, openAutofillSettings } from "@/modules/vaultix-autofill";
 import { useAuth } from "@/lib/auth";
 import { colors } from "@/lib/theme";
 
@@ -16,6 +17,15 @@ export default function Settings() {
   const email = session?.email || "Vaultix user";
   const initial = email.slice(0, 1).toUpperCase();
   const autofillSupported = isAutofillSupported();
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    const refresh = () => { isAutofillEnabled().then(setEnabled).catch(() => setEnabled(false)); };
+    refresh();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refresh();
+    });
+    return () => subscription.remove();
+  }, []);
 
   const onSignOut = () => {
     Alert.alert("Sign out?", "Your decrypted session and local autofill data will be cleared.", [
@@ -61,8 +71,15 @@ export default function Settings() {
             <SettingsRow
               icon={<Smartphone size={19} color={colors.accent} />}
               title="System autofill"
-              subtitle={autofillSupported ? "Credentials sync automatically" : "Unavailable in this build"}
-              status={autofillSupported ? "Ready" : undefined}
+              subtitle={autofillSupported ? (enabled ? "Enabled in system settings" : "Tap to enable in system settings") : "Unavailable in this build"}
+              status={autofillSupported ? (enabled ? "Enabled" : "Enable") : undefined}
+              onPress={autofillSupported ? () => {
+                if (Platform.OS === "android") {
+                  try { openAutofillSettings(); } catch { Alert.alert("Autofill", "Open Android Settings → Autofill service → Vaultix."); }
+                } else {
+                  Alert.alert("Autofill", "Enable Vaultix in Settings → Passwords → Password Options (or General → AutoFill & Passwords).");
+                }
+              } : undefined}
             />
             <SettingsRow
               icon={<KeyRound size={19} color={colors.warning} />}
@@ -92,15 +109,17 @@ function SettingsRow({
   subtitle,
   status,
   last,
+  onPress,
 }: {
   icon: React.ReactNode;
   title: string;
   subtitle: string;
   status?: string;
   last?: boolean;
+  onPress?: () => void;
 }) {
   return (
-    <Pressable className={`h-[76px] flex-row items-center gap-3 px-4 ${last ? "" : "border-b border-border"}`}>
+    <Pressable onPress={onPress} accessibilityRole={onPress ? "button" : undefined} className={`h-[76px] flex-row items-center gap-3 px-4 ${last ? "" : "border-b border-border"}`}>
       <View className="h-10 w-10 items-center justify-center rounded-md bg-secondary">{icon}</View>
       <View className="min-w-0 flex-1">
         <Text className="text-sm font-semibold text-foreground">{title}</Text>

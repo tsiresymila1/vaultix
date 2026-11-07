@@ -1,5 +1,7 @@
 const {
   withEntitlementsPlist,
+  withXcodeProject,
+  withInfoPlist,
   withAndroidManifest,
   withDangerousMod,
   withAppBuildGradle,
@@ -12,16 +14,49 @@ const APP_GROUP = "group.ts.mila.vaultix";
 const SECURITY_DEP = "androidx.security:security-crypto:1.1.0-alpha06";
 const ANDROID_MIN_SDK = 26;
 
-// --- iOS: App Group on the main app (so it can write the shared credential store).
-// The AutoFill Credential Provider *extension target* itself must be added in
-// Xcode after `expo prebuild` (target creation via pbxproj is not done here) —
-// its sources live in autofill/ios/. See README.
+// iOS app and credential-provider extension share the same App Group.
 function withIosAppGroup(config) {
   return withEntitlementsPlist(config, (c) => {
     const key = "com.apple.security.application-groups";
     const groups = new Set(c.modResults[key] || []);
     groups.add(APP_GROUP);
     c.modResults[key] = Array.from(groups);
+    c.modResults["keychain-access-groups"] = Array.from(new Set([
+      ...(c.modResults["keychain-access-groups"] || []), "$(AppIdentifierPrefix)ts.mila.vaultix",
+    ]));
+    return c;
+  });
+}
+
+function withIosExtension(config) {
+  return withXcodeProject(config, (c) => {
+    const project = c.modResults;
+    const name = "VaultixAutofill";
+    const destination = path.join(c.modRequest.platformProjectRoot, name);
+    fs.mkdirSync(destination, { recursive: true });
+    for (const file of fs.readdirSync(path.join(c.modRequest.projectRoot, "autofill/ios"))) {
+      fs.copyFileSync(path.join(c.modRequest.projectRoot, "autofill/ios", file), path.join(destination, file));
+    }
+    if (project.pbxTargetByName(name)) return c;
+    const target = project.addTarget(name, "app_extension", name, `${c.ios.bundleIdentifier}.autofill`);
+    project.addBuildPhase([`${name}/CredentialProviderViewController.swift`], "PBXSourcesBuildPhase", "Sources", target.uuid);
+    project.addBuildPhase([], "PBXResourcesBuildPhase", "Resources", target.uuid);
+    project.addBuildPhase([], "PBXFrameworksBuildPhase", "Frameworks", target.uuid);
+    const configurations = project.pbxXCBuildConfigurationSection();
+    const list = project.hash.project.objects.XCConfigurationList[target.pbxNativeTarget.buildConfigurationList];
+    for (const ref of list.buildConfigurations) {
+      const settings = configurations[ref.value].buildSettings;
+      Object.assign(settings, {
+        INFOPLIST_FILE: `${name}/Info.plist`,
+        CODE_SIGN_ENTITLEMENTS: `${name}/VaultixAutofill.entitlements`,
+        SWIFT_VERSION: "5.0",
+        IPHONEOS_DEPLOYMENT_TARGET: "15.1",
+        APPLICATION_EXTENSION_API_ONLY: "YES",
+        SKIP_INSTALL: "YES",
+        TARGETED_DEVICE_FAMILY: '"1,2"',
+      });
+      if (c.ios.appleTeamId) settings.DEVELOPMENT_TEAM = c.ios.appleTeamId;
+    }
     return c;
   });
 }
@@ -101,7 +136,12 @@ function withAndroidService(config) {
 }
 
 module.exports = function withVaultixAutofill(config) {
+  config = withInfoPlist(config, (c) => {
+    c.modResults.VaultixKeychainAccessGroup = "$(AppIdentifierPrefix)ts.mila.vaultix";
+    return c;
+  });
   config = withIosAppGroup(config);
+  config = withIosExtension(config);
   config = withAndroidService(config);
   return config;
 };

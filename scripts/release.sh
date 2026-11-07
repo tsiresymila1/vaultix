@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Create (or recreate) a release tag and push it.
-# The tag push triggers .github/workflows/cli-release.yml.
+# The tag push builds the CLI and signed Android APK, then publishes both in a
+# GitHub Release through .github/workflows/cli-release.yml.
 #
 # Usage:
 #   pnpm release v1.2.3
