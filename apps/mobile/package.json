@@ -6,7 +6,7 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "build:android:apk": "cd android && NODE_ENV=production ./gradlew app:assembleRelease",
+    "build:android:apk": "cd android && NODE_ENV=production ./gradlew --no-daemon app:assembleRelease",
     "ios": "expo run:ios",
     "prebuild": "expo prebuild",
     "typecheck": "tsc --noEmit"
