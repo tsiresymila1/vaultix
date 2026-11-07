@@ -13,7 +13,7 @@ test("sign-in stays locked, unlock requests share one modal and reuse the in-mem
     createContext: () => ({ Provider: "provider" }),
     createElement: (type, props, ...children) => ({ type, props, children }),
     useContext: () => {},
-    useState: value => { const i = cursor++; if (!(i in slots)) slots[i] = value; return [slots[i], value => { slots[i] = value; }]; },
+    useState: value => { const i = cursor++; if (!(i in slots)) slots[i] = value; return [slots[i], value => { slots[i] = typeof value === "function" ? value(slots[i]) : value; }]; },
     useRef: value => { const i = cursor++; if (!(i in slots)) slots[i] = { current: value }; return slots[i]; },
     useEffect: effect => { const i = cursor++; if (!(i in slots)) { slots[i] = true; effects.push(effect); } },
   };
@@ -50,4 +50,18 @@ test("sign-in stays locked, unlock requests share one modal and reuse the in-mem
   assert.equal(tree.children[1].props.visible, false);
   assert.equal(await tree.props.value.requestUnlock(), true);
   assert.equal(derives, 2);
+  const retry = tree.props.value.requestUnlock(true);
+  tree = render();
+  assert.equal(tree.props.value.session.pwPrivateKey, "");
+  assert.equal(tree.children[1].props.visible, true);
+  await tree.props.value.unlock("correct");
+  assert.equal(await retry, true);
+  tree = render();
+  assert.equal(tree.props.value.session.pwPrivateKey, "private");
+  assert.equal(derives, 3);
+  const cancelled = tree.props.value.requestUnlock(true);
+  tree = render();
+  tree.children[1].props.onCancel();
+  assert.equal(await cancelled, false);
+  assert.equal(render().props.value.session.pwPrivateKey, "");
 });

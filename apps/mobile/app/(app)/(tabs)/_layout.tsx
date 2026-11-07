@@ -9,7 +9,7 @@ export default function TabsLayout() {
   return (
     <Tabs initialRouteName="passwords" screenOptions={{
       headerShown: false,
-      tabBarButton: ({ children, onPress, onLongPress, accessibilityState, accessibilityLabel, testID }) => <Pressable onPress={onPress} onLongPress={onLongPress} accessibilityRole="button" accessibilityState={accessibilityState} accessibilityLabel={accessibilityLabel} testID={testID} style={({ pressed }) => ({ flex: 1, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.7 : 1 })}>{children}</Pressable>,
+      tabBarButton: ({ children, onPress, onLongPress, accessibilityState, accessibilityLabel, testID, style }) => <Pressable onPress={onPress} onLongPress={onLongPress} accessibilityRole="button" accessibilityState={accessibilityState} accessibilityLabel={accessibilityLabel} testID={testID} style={({ pressed }) => [style, { opacity: pressed ? 0.7 : 1 }]}>{children}</Pressable>,
       tabBarActiveTintColor: colors.foreground,
       tabBarInactiveTintColor: colors.mutedForeground,
       tabBarHideOnKeyboard: true,

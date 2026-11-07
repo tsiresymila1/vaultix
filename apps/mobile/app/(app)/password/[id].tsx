@@ -33,7 +33,7 @@ export default function PasswordDetail() {
   const dialog = useMaterialDialog();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { entries, loading } = usePasswords();
-  const { session } = useAuth();
+  const { session, requestUnlock } = useAuth();
   const router = useRouter();
 
   const entry = entries.find((item) => item.id === id) as PasswordEntry | undefined;
@@ -44,7 +44,7 @@ export default function PasswordDetail() {
   useEffect(() => {
     setPassword(null);
     setVisible(false);
-  }, [entry?.encrypted_password, entry?.password_nonce, entry?.sealed_key]);
+  }, [entry?.encrypted_password, entry?.password_nonce, entry?.sealed_key, session?.pwPrivateKey]);
 
   const ensureDecrypted = async (): Promise<string | null> => {
     if (password) return password;
@@ -56,7 +56,10 @@ export default function PasswordDetail() {
       setPassword(decrypted);
       return decrypted;
     } catch {
-      dialog.alert("Error", "Failed to decrypt this password.");
+      dialog.alert("Déchiffrement impossible", "Vérifiez votre mot de passe maître et réessayez.", [
+        { text: "Fermer", style: "cancel" },
+        { text: "Réessayer", onPress: () => { setPassword(null); setVisible(false); void requestUnlock(true); } },
+      ], { compactActions: true });
       return null;
     } finally {
       setRevealing(false);

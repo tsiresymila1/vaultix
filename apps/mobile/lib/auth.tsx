@@ -27,7 +27,7 @@ interface AuthContextType {
   verifyCode: (email: string, code: string) => Promise<{ needsSetup: boolean }>;
   unlock: (masterPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
-  requestUnlock: () => Promise<boolean>;
+  requestUnlock: (force?: boolean) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,7 +41,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const epoch = useRef(0);
   const waiting = useRef<Array<(value: boolean) => void>>([]);
   const completeUnlock = (value: boolean) => { setUnlockVisible(false); waiting.current.splice(0).forEach(resolve => resolve(value)); };
-  const requestUnlock = () => session?.pwPrivateKey ? Promise.resolve(true) : new Promise<boolean>(resolve => { waiting.current.push(resolve); setUnlockVisible(true); });
+  const requestUnlock = (force = false) => {
+    if (session?.pwPrivateKey && !force) return Promise.resolve(true);
+    if (force) {
+      clearAutofill();
+      setSession(current => current ? { ...current, pwPrivateKey: "" } : current);
+    }
+    return new Promise<boolean>(resolve => { waiting.current.push(resolve); setUnlockVisible(true); });
+  };
 
   useEffect(() => {
     clearAutofill();
