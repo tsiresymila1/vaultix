@@ -52,8 +52,9 @@ Expo autolinking points to the matching Kotlin class.
 
 The `Release Vaultix` GitHub Actions workflow runs for every `v*` tag. It builds
 the CLI binaries and a signed Android APK in parallel, stores them as workflow
-artifacts, verifies the APK signature, then attaches the APK, its SHA-256 checksum
-and CLI binaries to the same GitHub Release. The APK is a standalone release build
+artifacts, verifies the APK signature, then publishes the APK and its SHA-256 checksum to GitHub Releases.
+CLI binaries publish independently to the same release: a CLI packaging failure
+does not block the Android release. The APK is a standalone release build
 with its JS bundle included; Metro is not required. You can also run the workflow
 manually with an existing version tag.
 

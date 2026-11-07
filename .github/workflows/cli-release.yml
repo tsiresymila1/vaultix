@@ -158,17 +158,20 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  publish-release:
-    needs: [build-cli, build-android]
+  publish-android:
+    needs: build-android
     runs-on: ubuntu-latest
+    concurrency:
+      group: publish-assets-${{ github.event.inputs.tag || github.ref_name }}
+      cancel-in-progress: false
     steps:
-      - name: Download release artifacts
+      - name: Download Android APK
         uses: actions/download-artifact@v4
         with:
+          name: vaultix-android-${{ github.event.inputs.tag || github.ref_name }}
           path: release-assets
-          merge-multiple: true
 
-      - name: Create GitHub Release
+      - name: Publish Android APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
@@ -177,3 +180,27 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+
+  publish-cli:
+    needs: build-cli
+    runs-on: ubuntu-latest
+    concurrency:
+      group: publish-assets-${{ github.event.inputs.tag || github.ref_name }}
+      cancel-in-progress: false
+    steps:
+      - name: Download CLI binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: vaultix-cli-${{ github.event.inputs.tag || github.ref_name }}
+          path: release-assets
+
+      - name: Publish CLI binaries to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          fail_on_unmatched_files: true
+          files: release-assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
