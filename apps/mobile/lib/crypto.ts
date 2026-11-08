@@ -58,6 +58,7 @@ export async function generateEntryKey(): Promise<string> {
   return lib.to_base64(lib.crypto_aead_xchacha20poly1305_ietf_keygen());
 }
 
+// The native adapter requires string AD; an empty string is byte-equivalent to web null AD.
 /** Encrypt content with a symmetric key → { cipher, nonce } (both base64). */
 export async function encryptSecret(
   plaintext: string,
@@ -67,7 +68,7 @@ export async function encryptSecret(
   const nonce = lib.randombytes_buf(lib.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
   const cipher = lib.crypto_aead_xchacha20poly1305_ietf_encrypt(
     plaintext,
-    null,
+    "",
     null,
     nonce,
     decode(lib, keyBase64),
@@ -108,7 +109,7 @@ export async function decryptSecret(
   const plain = lib.crypto_aead_xchacha20poly1305_ietf_decrypt(
     null,
     decode(lib, cipherBase64),
-    null,
+    "",
     decode(lib, nonceBase64),
     decode(lib, keyBase64),
   );
