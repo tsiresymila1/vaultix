@@ -52,10 +52,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     clearAutofill();
-    loadSession()
-      .then(value => { setSession(value); if (value?.pwSalt && value.pwEncryptedPrivateKey && value.pwPrivateKeyNonce) setPending(value as Pending); })
+    let active = true;
+    const restore = async () => {
+      const [value, currentUser] = await Promise.all([loadSession(), db.getAuth()]);
+      if (!value || !active) return;
+      let user = currentUser;
+      if (!user && value.instantToken) {
+        await db.auth.signInWithToken(value.instantToken);
+        user = await db.getAuth();
+      }
+      if (!active) return;
+      if (!user || user.email?.toLowerCase() !== value.email.toLowerCase()) {
+        await clearSession();
+        return;
+      }
+      setSession(value);
+      if (value.pwSalt && value.pwEncryptedPrivateKey && value.pwPrivateKeyNonce) setPending(value as Pending);
+    };
+    restore()
       .catch(() => setSession(null))
-      .finally(() => setReady(true));
+      .finally(() => { if (active) setReady(true); });
+    return () => { active = false; };
   }, []);
 
   const sendCode = async (email: string) => {
@@ -79,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const u = me.user;
     if (!u.pw_public_key || !u.pw_encrypted_private_key || !u.pw_private_key_nonce || !u.pw_salt) {
-      const authenticated: Session = { token: mint.token, email: u.email, pwPublicKey: u.pw_public_key ?? "", pwPrivateKey: "" };
+      const authenticated: Session = { token: mint.token, email: u.email, instantToken: authUser.refresh_token, pwPublicKey: u.pw_public_key ?? "", pwPrivateKey: "" };
       await saveSession(authenticated);
       setSession(authenticated);
       setPending(null);
@@ -93,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       pwPrivateKeyNonce: u.pw_private_key_nonce,
       pwSalt: u.pw_salt,
     };
-    const authenticated: Session = { ...metadata, pwPrivateKey: "" };
+    const authenticated: Session = { ...metadata, instantToken: authUser.refresh_token, pwPrivateKey: "" };
     await saveSession(authenticated);
     setPending(metadata);
     setSession(authenticated);
@@ -115,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       pwPrivateKey = await decryptPrivateKey(material.pwEncryptedPrivateKey, material.pwPrivateKeyNonce, masterKey);
     } finally { masterKey.fill(0); }
     if (epoch.current !== generation) throw new Error("Session terminée");
-    const next: Session = { ...material, pwPrivateKey };
+    const next: Session = { ...material, instantToken: session?.instantToken, pwPrivateKey };
     await saveSession(next);
     if (epoch.current !== generation) return;
     setPending(material);

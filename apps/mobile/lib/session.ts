@@ -16,6 +16,7 @@ export interface Session {
   pwEncryptedPrivateKey?: string;
   pwPrivateKeyNonce?: string;
   pwSalt?: string;
+  instantToken?: string;
 }
 
 export async function saveSession(sess: Session) {

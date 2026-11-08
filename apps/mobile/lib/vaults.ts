@@ -14,7 +14,7 @@ function messageFrom(error: unknown, fallback: string) {
 
 export function useVaults() {
   const { session } = useAuth();
-  const { user, isLoading: authLoading } = db.useAuth();
+  const { user, isLoading: authLoading, error: authError } = db.useAuth();
   const { data, isLoading, error } = db.useQuery(
     session && user
       ? {
@@ -39,7 +39,7 @@ export function useVaults() {
   return {
     refresh: async () => { await db.queryOnce({ vaults: { $: { order: { createdAt: "desc" } }, environments: {} } }); },
     vaults,
-    loading: authLoading || isLoading,
-    error: error ? messageFrom(error, "Failed to load vaults") : null,
+    loading: !authError && !error && (authLoading || (Boolean(session && user) && isLoading)),
+    error: authError || error ? messageFrom(authError ?? error, "Failed to load vaults") : null,
   };
 }

@@ -24,7 +24,7 @@ export interface PasswordEntry {
  *  until you decrypt an entry on demand. */
 export function usePasswords() {
   const { session } = useAuth();
-  const { user, isLoading: authLoading } = db.useAuth();
+  const { user, isLoading: authLoading, error: authError } = db.useAuth();
   const { data: profileData, isLoading: profileLoading, error: profileError } = db.useQuery(
     session && user
       ? { profiles: { $: { where: { "$user.id": user.id } } } }
@@ -66,12 +66,12 @@ export function usePasswords() {
     );
   }, [ownedData?.passwordEntries, sharedData?.passwordShares]);
 
-  const queryError = profileError ?? ownedError ?? sharedError;
+  const queryError = authError ?? profileError ?? ownedError ?? sharedError;
 
   return {
     refresh: async () => { if (!profileId) return; await db.queryOnce({ passwordEntries: { $: { where: { "owner.id": profileId } } }, passwordShares: { $: { where: { "recipient.id": profileId } }, entry: {} } }); },
     entries,
-    loading: authLoading || profileLoading || (Boolean(profileId) && (ownedLoading || sharedLoading)),
+    loading: !queryError && (authLoading || (Boolean(session && user) && profileLoading) || (Boolean(profileId) && (ownedLoading || sharedLoading))),
     error: queryError instanceof Error ? queryError.message : queryError ? "Failed to load passwords" : null,
   };
 }
