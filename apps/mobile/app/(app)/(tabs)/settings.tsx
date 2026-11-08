@@ -1,11 +1,13 @@
+import { ScreenScroll } from "@/components/ui/screen-scroll";
 import { useMaterialDialog } from "@/components/material-dialog";
 import { useEffect, useState } from "react";
-import { AppState, Platform, Pressable, ScrollView, View } from "react-native";
+import { AppState, Platform, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ChevronRight, KeyRound, LogOut, ShieldCheck, Smartphone } from "lucide-react-native";
 import { FadeIn } from "@/components/motion";
 import { ScreenHeader, SectionHeader } from "@/components/screen-header";
+import { ListRow } from "@/components/ui/list-row";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { isAutofillSupported, isAutofillEnabled, openAutofillSettings } from "@/modules/vaultix-autofill";
@@ -44,7 +46,7 @@ export default function Settings() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+      <ScreenScroll contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
         <ScreenHeader title="Réglages" />
 
         <View className="px-6">
@@ -91,7 +93,7 @@ export default function Settings() {
           </Button>
           <Text className="mt-3 text-center text-xs text-muted-foreground">Vaultix mobile 0.1.0</Text>
         </FadeIn>
-      </ScrollView>
+      </ScreenScroll>
     </SafeAreaView>
   );
 }
@@ -111,14 +113,6 @@ function SettingsRow({
   last?: boolean;
   onPress?: () => void;
 }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole={onPress ? "button" : undefined} className={`h-[76px] flex-row items-center gap-3 px-4 ${last ? "" : "border-b border-border"}`}>
-      <View className="h-10 w-10 items-center justify-center bg-transparent">{icon}</View>
-      <View className="min-w-0 flex-1">
-        <Text className="text-sm font-semibold text-foreground">{title}</Text>
-        <Text className="mt-0.5 text-xs text-muted-foreground" numberOfLines={1}>{subtitle}</Text>
-      </View>
-      {status ? <Text className="text-xs font-semibold text-primary">{status}</Text> : <ChevronRight size={17} color={colors.mutedForeground} />}
-    </Pressable>
-  );
+  return <ListRow title={title} detail={subtitle} icon={icon} onPress={onPress}
+    trailing={status ? <Text className="px-3 text-xs font-semibold text-primary">{status}</Text> : onPress ? <ChevronRight size={17} color={colors.mutedForeground} /> : undefined} />;
 }

@@ -1,6 +1,7 @@
+import { ScreenScroll } from "@/components/ui/screen-scroll";
 import { useMaterialDialog } from "@/components/material-dialog";
 import { useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Save } from "lucide-react-native";
@@ -58,7 +59,7 @@ export default function NewPassword() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <FormScreenHeader title="New password" subtitle="Add a login to your vault" onBack={() => router.back()} />
 
-      <ScrollView
+      <ScreenScroll
         contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 6, paddingBottom: 40, gap: 22 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -108,8 +109,7 @@ export default function NewPassword() {
               value={notes}
               onChangeText={setNotes}
               multiline
-              textAlignVertical="top"
-              className="h-24 py-3"
+              className="min-h-32"
             />
           </FormSection>
         </FadeIn>
@@ -123,7 +123,7 @@ export default function NewPassword() {
             Encrypted locally before it leaves this device
           </Text>
         </View>
-      </ScrollView>
+      </ScreenScroll>
     </SafeAreaView>
   );
 }

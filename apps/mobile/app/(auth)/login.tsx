@@ -1,6 +1,7 @@
+import { ScreenScroll } from "@/components/ui/screen-scroll";
 import { useMaterialDialog } from "@/components/material-dialog";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
+import { KeyboardAvoidingView, Platform, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
@@ -61,12 +62,12 @@ export default function Login() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
-        <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+        <ScreenScroll contentContainerStyle={{ padding: 24, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
           <View className="h-12 justify-center">
             {step === "email" ? <Text className="text-xl font-semibold">Vaultix</Text> : (
-              <Pressable accessibilityRole="button" accessibilityLabel="Retour" disabled={loading} onPress={() => setStep("email")} className="h-12 w-12 justify-center">
+              <Button variant="ghost" size="icon" accessibilityRole="button" accessibilityLabel="Retour" disabled={loading} onPress={() => setStep("email")} className="h-12 w-12 justify-center">
                 <ArrowLeft size={22} color={colors.foreground} />
-              </Pressable>
+              </Button>
             )}
           </View>
           <View className="mb-8 mt-5 flex-row gap-1.5" accessibilityLabel={`Étape ${stepIndex[step] + 1} sur 2`}>
@@ -76,7 +77,7 @@ export default function Login() {
           <Text className="mb-8 mt-3 text-sm leading-6 text-muted-foreground">{step === "email" ? "Recevez un code pour vous connecter à votre compte." : `Saisissez le code envoyé à ${email}.`}</Text>
           <View className="gap-3">
             <Label>{step === "email" ? "Adresse e-mail" : "Code à 6 chiffres"}</Label>
-            {step === "email" ? <Input accessibilityLabel="Adresse e-mail" placeholder="nom@exemple.fr" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} editable={!loading} returnKeyType="go" onSubmitEditing={onSend} /> : <Input accessibilityLabel="Code de vérification" placeholder="000000" keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" value={code} onChangeText={value => setCode(value.replace(/[^0-9]/g, ""))} maxLength={6} editable={!loading} className="text-xl tracking-[6px]" />}
+            {step === "email" ? <Input accessibilityLabel="Adresse e-mail" placeholder="nom@exemple.fr" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} editable={!loading} returnKeyType="go" onSubmitEditing={onSend} /> : <Input accessibilityLabel="Code de vérification" placeholder="000000" keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" value={code} onChangeText={setCode} normalize={value => value.replace(/[^0-9]/g, "")} maxLength={6} editable={!loading} className="text-xl tracking-[6px]" />}
             <Button className="mt-3" loading={loading} disabled={step === "email" ? !email.trim() : code.length !== 6} onPress={step === "email" ? onSend : onVerify}>
               <Text>{step === "email" ? "Recevoir un code" : "Vérifier le code"}</Text>
             </Button>
@@ -88,7 +89,7 @@ export default function Login() {
             }}><Text>Renvoyer le code</Text></Button> : null}
           </View>
           <Text className="mt-6 text-xs leading-5 text-muted-foreground">Votre mot de passe maître sera demandé à l’ouverture d’un identifiant.</Text>
-        </ScrollView>
+        </ScreenScroll>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

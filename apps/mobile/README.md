@@ -2,7 +2,7 @@
 
 Vaultix mobile app (Expo + Expo Router + NativeWind). A 1Password-style password
 manager: magic-code login, master-password unlock, browse + reveal + copy your
-passwords. Shares the web design system (Outfit font, Supabase-green primary,
+passwords. Shares the web design system (Poppins font, Vaultix green primary,
 Shield logo) and the same typed Hono RPC backend (`@vaultix/api-client`).
 
 ## Stack
@@ -32,13 +32,33 @@ npx expo run:ios      # or: npx expo run:android
 > `react-native-libsodium` is a native module, so use a **dev build** (`expo run:*`)
 > — it won't work in Expo Go.
 
+## Native Material UI
+
+All mobile screens use Expo UI controls: Material / Jetpack Compose on Android,
+SwiftUI on iOS. This includes authentication and password forms, buttons,
+segmented filters, list rows, loading indicators, scrolling, pull-to-refresh,
+and dialogs. Android navigation uses Material `NavigationBar`; iOS uses Expo
+Router's native tabs. React Native remains the screen layout and typography
+layer, hosted through `RNHostView` where Compose/SwiftUI embeds screen content.
+The shared auth, encryption, favorites and autofill behavior is unchanged.
+
+Rebuild the native app after installing `@expo/ui`; restarting Metro alone cannot
+add the native module. Verify on device: login with email/OTP, switch all tabs,
+refresh empty/populated lists, search/filter/favorite, create/edit a password,
+generate a password and toggle visibility, cancel unlock, enter a wrong password,
+retry, then unlock successfully and open another entry without a second prompt.
+Check project environments and reveal/copy, sign out, system gesture and three-button
+navigation, keyboard show/hide, large fonts and TalkBack/VoiceOver.
+Measure release APK size when comparing releases.
+
 ## Auth / crypto flow
 
 ```
 magic code (InstantDB)  →  mint Vaultix JWT (/api/auth/token/mint)
                         →  GET /api/extension/me  (pw_* material)
-                        →  master password → Argon2id → decrypt vault private key
                         →  InstantDB live query (encrypted entries + sealed keys)
+                        →  open an entry → master-password dialog
+                        →  Argon2id → decrypt vault private key (session memory)
                         →  unseal entry key → decrypt (on device)
 ```
 

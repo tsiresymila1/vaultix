@@ -1,10 +1,9 @@
+import { ScreenScroll } from "@/components/ui/screen-scroll";
+import { Spinner } from "@/components/ui/spinner";
 import { useMaterialDialog } from "@/components/material-dialog";
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  ActivityIndicator,
   Linking,
-  Pressable,
-  ScrollView,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -25,6 +24,8 @@ import {
 } from "lucide-react-native";
 import { deletePassword, revealPassword, usePasswords, type PasswordEntry } from "@/lib/passwords";
 import { useAuth } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
+import { ListRow } from "@/components/ui/list-row";
 import { Text } from "@/components/ui/text";
 import { FadeIn } from "@/components/motion";
 import { colors } from "@/lib/theme";
@@ -147,7 +148,7 @@ export default function PasswordDetail() {
 
       {loading && !entry ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color={colors.primary} />
+          <Spinner color={colors.primary} />
         </View>
       ) : !entry ? (
         <View className="flex-1 items-center justify-center gap-3 px-6">
@@ -160,7 +161,7 @@ export default function PasswordDetail() {
           </Text>
         </View>
       ) : (
-        <ScrollView
+        <ScreenScroll
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
         >
@@ -249,7 +250,7 @@ export default function PasswordDetail() {
             <KeyRound size={13} color={colors.mutedForeground} />
             <Text className="text-xs text-muted-foreground">Chiffrement de bout en bout</Text>
           </View>
-        </ScrollView>
+        </ScreenScroll>
       )}
     </SafeAreaView>
   );
@@ -267,18 +268,16 @@ function IconButton({
   destructive?: boolean;
 }) {
   return (
-    <Pressable
-      accessibilityLabel={label}
+    <Button variant="ghost"
+      size="icon" accessibilityLabel={label}
       accessibilityRole="button"
       onPress={onPress}
       className={`h-10 w-10 items-center justify-center rounded-md border ${
         destructive ? "border-destructive/20 bg-destructive/10" : "border-transparent bg-background"
       }`}
-      style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
-      hitSlop={4}
     >
       {children}
-    </Pressable>
+    </Button>
   );
 }
 
@@ -296,17 +295,16 @@ function QuickAction({
   busy?: boolean;
 }) {
   return (
-    <Pressable
+    <Button variant="ghost"
       accessibilityLabel={label}
       accessibilityRole="button"
       disabled={disabled || busy}
       onPress={onPress}
-      className="h-[82px] flex-1 items-center justify-center gap-2"
-      style={({ pressed }) => ({ opacity: disabled ? 0.45 : pressed ? 0.65 : 1 })}
+      height={82} contentClassName="flex-col" className="flex-1"
     >
-      {busy ? <ActivityIndicator size="small" color={colors.primary} /> : icon}
+      {busy ? <Spinner size="small" color={colors.primary} /> : icon}
       <Text className="text-xs font-medium text-foreground">{label}</Text>
-    </Pressable>
+    </Button>
   );
 }
 
@@ -329,30 +327,6 @@ function DetailRow({
   multiline?: boolean;
   last?: boolean;
 }) {
-  return (
-    <View className={`min-h-[72px] flex-row items-center gap-3 py-3 ${last ? "" : "border-b border-border"}`}>
-      <View className="h-9 w-9 items-center justify-center bg-transparent">{icon}</View>
-      <View className="min-w-0 flex-1">
-        <Text className="text-xs text-muted-foreground">{label}</Text>
-        <Text
-          className={`mt-1 text-[15px] ${muted ? "text-muted-foreground" : "text-foreground"}`}
-          numberOfLines={multiline ? undefined : 1}
-        >
-          {value}
-        </Text>
-      </View>
-      {action && onAction ? (
-        <Pressable
-          accessibilityLabel={`${label} action`}
-          accessibilityRole="button"
-          onPress={onAction}
-          className="h-10 w-10 items-center justify-center"
-          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-          hitSlop={4}
-        >
-          {action}
-        </Pressable>
-      ) : null}
-    </View>
-  );
+  return <ListRow title={label} detail={value} icon={icon} multiline={multiline}
+    trailing={action && onAction ? <Button variant="ghost" size="icon" accessibilityLabel={`${label} : action`} onPress={onAction}>{action}</Button> : undefined} />;
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 import { ChevronLeft, Eye, EyeOff, Sparkles } from "lucide-react-native";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Text } from "@/components/ui/text";
@@ -17,14 +18,14 @@ export function FormScreenHeader({
 }) {
   return (
     <View className="h-[70px] flex-row items-center gap-3 px-4">
-      <Pressable
-        accessibilityLabel="Go back"
+      <Button variant="ghost"
+        size="icon" accessibilityLabel="Retour"
         onPress={onBack}
         className="h-12 w-12 items-center justify-center"
-        hitSlop={6}
+
       >
         <ChevronLeft size={21} color={colors.foreground} />
-      </Pressable>
+      </Button>
       <View>
         <Text className="text-lg font-semibold text-foreground">{title}</Text>
         <Text className="text-xs text-muted-foreground">{subtitle}</Text>
@@ -70,28 +71,28 @@ export function SecretInput({
     <View className="gap-2">
       <View className="flex-row items-center justify-between">
         <Label className="text-xs text-muted-foreground">Password</Label>
-        <Pressable onPress={onGenerate} className="flex-row items-center gap-1.5 py-1" hitSlop={6}>
+        <Button variant="ghost" onPress={onGenerate} className="w-44" >
           <Sparkles size={14} color={colors.primary} />
           <Text className="text-xs font-semibold text-primary">Generate secure</Text>
-        </Pressable>
+        </Button>
       </View>
-      <View className="h-[52px] flex-row items-center rounded-t-xl border-b border-muted-foreground bg-input pr-2">
+      <View className="flex-row items-center gap-2">
         <Input
           placeholder={placeholder}
           secureTextEntry={!visible}
           autoCapitalize="none"
           value={value}
           onChangeText={onChangeText}
-          className="h-12 flex-1 border-0 bg-transparent px-4"
+          className="flex-1"
         />
-        <Pressable
-          accessibilityLabel={visible ? "Hide password" : "Show password"}
+        <Button variant="ghost"
+          size="icon" accessibilityLabel={visible ? "Hide password" : "Show password"}
           onPress={onToggleVisible}
           className="h-9 w-9 items-center justify-center"
-          hitSlop={8}
+
         >
           {visible ? <EyeOff size={18} color={colors.mutedForeground} /> : <Eye size={18} color={colors.mutedForeground} />}
-        </Pressable>
+        </Button>
       </View>
     </View>
   );

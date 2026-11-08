@@ -1,7 +1,6 @@
 import { createContext, useContext, useRef, useState, type ReactNode } from "react";
-import { Modal, ScrollView, View, type AlertButton } from "react-native";
-import { Button } from "./ui/button";
-import { Text } from "./ui/text";
+import { type AlertButton } from "react-native";
+import { MaterialDialogContent } from "./material-dialog-content";
 type Message = { title: string; message?: string; buttons?: AlertButton[]; compactActions?: boolean };
 const Context = createContext<{ alert: (title: string, message?: string, buttons?: AlertButton[], options?: { compactActions?: boolean }) => void }>({ alert: () => {} });
 export function MaterialDialogProvider({ children }: { children: ReactNode }) {
@@ -16,14 +15,10 @@ export function MaterialDialogProvider({ children }: { children: ReactNode }) {
   };
   return <Context.Provider value={{ alert }}>
     {children}
-    <Modal visible={!!message} transparent animationType="fade" onRequestClose={dismiss}>
-      <View className="flex-1 justify-center bg-black/40 px-6">
-        <View accessibilityViewIsModal className="max-h-[80%] rounded-[28px] bg-card p-6">
-          <ScrollView><Text className="text-xl font-semibold">{message?.title}</Text><Text className="mt-3 text-sm leading-6 text-muted-foreground">{message?.message}</Text></ScrollView>
-          <View className={message?.compactActions ? "mt-5 flex-row justify-end gap-2" : "mt-5 gap-2"}>{(message?.buttons ?? [{ text: "Fermer" }]).map((button, i) => <Button key={i} size={message?.compactActions ? "sm" : "default"} variant={button.style === "destructive" ? "destructive" : button.style === "cancel" ? "ghost" : "default"} onPress={() => { dismiss(); Promise.resolve().then(() => button.onPress?.()).catch(() => alert("Erreur", "Impossible de terminer cette action.")); }}><Text>{button.text}</Text></Button>)}</View>
-        </View>
-      </View>
-    </Modal>
+    <MaterialDialogContent message={message} dismiss={dismiss} onAction={button => {
+      dismiss();
+      Promise.resolve().then(() => button.onPress?.()).catch(() => alert("Erreur", "Impossible de terminer cette action."));
+    }} />
   </Context.Provider>;
 }
 export const useMaterialDialog = () => useContext(Context);

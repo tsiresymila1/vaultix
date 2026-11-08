@@ -1,6 +1,8 @@
+import { ScreenScroll } from "@/components/ui/screen-scroll";
+import { Spinner } from "@/components/ui/spinner";
 import { useMaterialDialog } from "@/components/material-dialog";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Save } from "lucide-react-native";
@@ -75,14 +77,14 @@ export default function EditPassword() {
 
       {loading && !entry ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color={colors.primary} />
+          <Spinner color={colors.primary} />
         </View>
       ) : !entry ? (
         <View className="flex-1 items-center justify-center">
           <Text className="text-muted-foreground">Password not found</Text>
         </View>
       ) : (
-        <ScrollView
+        <ScreenScroll
           contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 6, paddingBottom: 40, gap: 22 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -120,8 +122,7 @@ export default function EditPassword() {
                 value={notes}
                 onChangeText={setNotes}
                 multiline
-                textAlignVertical="top"
-                className="h-24 py-3"
+                  className="min-h-32"
               />
             </FormSection>
           </FadeIn>
@@ -135,7 +136,7 @@ export default function EditPassword() {
               <Text className="mt-3 text-center text-xs text-warning">The account password will be replaced</Text>
             ) : null}
           </View>
-        </ScrollView>
+        </ScreenScroll>
       )}
     </SafeAreaView>
   );

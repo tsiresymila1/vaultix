@@ -1,11 +1,14 @@
+import { ScreenScroll } from "@/components/ui/screen-scroll";
+import { Spinner } from "@/components/ui/spinner";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { useMaterialDialog } from "@/components/material-dialog";
-import { ActivityIndicator, RefreshControl, Pressable, ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Box } from "lucide-react-native";
 import { StaggerItem } from "@/components/motion";
 import { ScreenHeader, SectionHeader } from "@/components/screen-header";
+import { ListRow } from "@/components/ui/list-row";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/lib/theme";
 import { useVaults, type MobileVault } from "@/lib/vaults";
@@ -18,8 +21,8 @@ export default function VaultixHome() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <ScrollView
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
+      <ScreenScroll
+          refreshing={refreshing} onRefresh={onRefresh}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 24 }}
       >
@@ -28,7 +31,7 @@ export default function VaultixHome() {
           <SectionHeader title="Projets" />
           {loading && vaults.length === 0 ? (
             <View className="h-36 items-center justify-center">
-              <ActivityIndicator color={colors.primary} />
+              <Spinner color={colors.primary} />
             </View>
           ) : error ? (
             <View className="items-start rounded-md border border-destructive/30 bg-destructive/10 p-4">
@@ -52,7 +55,7 @@ export default function VaultixHome() {
         </View>
 
 
-      </ScrollView>
+      </ScreenScroll>
     </SafeAreaView>
   );
 }
@@ -62,34 +65,9 @@ function VaultRow({ vault, last }: { vault: MobileVault; last: boolean }) {
   const visibleEnvironments = vault.environments.slice(0, 2);
   const remainingEnvironments = vault.environments.length - visibleEnvironments.length;
 
-  return (
-    <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/(app)/project/[id]", params: { id: vault.id } })} className={`min-h-[76px] flex-row items-center gap-3 py-3 ${last ? "" : "border-b border-border"}`}>
-      <View className="h-11 w-11 items-center justify-center">
-        <Box size={24} color={colors.primary} />
-      </View>
-      <View className="min-w-0 flex-1">
-        <Text className="text-base font-semibold text-foreground" numberOfLines={1}>{vault.name}</Text>
-        <View className="mt-1.5 flex-row items-center gap-1.5">
-          {visibleEnvironments.length > 0 ? (
-            visibleEnvironments.map((environment) => (
-              <View key={environment} className="max-w-[82px] rounded-sm bg-secondary px-1.5 py-0.5">
-                <Text className="text-[10px] font-semibold uppercase text-muted-foreground" numberOfLines={1}>
-                  {environment}
-                </Text>
-              </View>
-            ))
-          ) : (
-            <Text className="text-xs text-muted-foreground">Aucun environnement</Text>
-          )}
-          {remainingEnvironments > 0 ? (
-            <Text className="text-[10px] font-semibold text-muted-foreground">+{remainingEnvironments}</Text>
-          ) : null}
-        </View>
-      </View>
-      <View className="items-end">
-        <Text className="text-sm font-semibold text-foreground">{vault.environments.length}</Text>
-        <Text className="text-[10px] text-muted-foreground">env</Text>
-      </View>
-    </Pressable>
-  );
+  return <ListRow title={vault.name}
+    detail={visibleEnvironments.length ? `${visibleEnvironments.join(" · ")}${remainingEnvironments ? ` · +${remainingEnvironments}` : ""}` : "Aucun environnement"}
+    icon={<Box size={24} color={colors.primary} />}
+    onPress={() => router.push({ pathname: "/(app)/project/[id]", params: { id: vault.id } })}
+    trailing={<Text className="px-3 text-xs text-muted-foreground">{vault.environments.length} env</Text>} />;
 }

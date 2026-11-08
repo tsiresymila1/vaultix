@@ -1,83 +1,30 @@
-import * as React from "react";
-import { ActivityIndicator, Pressable } from "react-native";
-import { Slot } from "@rn-primitives/slot";
-import { cva, type VariantProps } from "class-variance-authority";
+import type { ReactNode } from "react";
+import { View, type ViewProps } from "react-native";
+import { Host, Button as NativeButton, RNHostView } from "@expo/ui";
+import { ProgressView } from "@expo/ui/swift-ui";
+import { tint, accessibilityLabel as nativeLabel } from "@expo/ui/swift-ui/modifiers";
 import { TextClassContext } from "./text";
 import { cn } from "@/lib/utils";
 import { colors } from "@/lib/theme";
 
-const buttonVariants = cva(
-  "flex-row items-center justify-center gap-2 rounded-full active:opacity-75",
-  {
-    variants: {
-      variant: {
-        default: "bg-primary",
-        destructive: "bg-destructive",
-        outline: "border border-border bg-card",
-        secondary: "bg-secondary",
-        ghost: "bg-transparent",
-      },
-      size: {
-        default: "h-[52px] px-5",
-        sm: "h-9 px-3",
-        lg: "h-14 px-7",
-        icon: "h-11 w-11",
-      },
-    },
-    defaultVariants: { variant: "default", size: "default" },
-  },
-);
-
-const buttonTextVariants = cva("text-base font-semibold", {
-  variants: {
-    variant: {
-      default: "text-primary-foreground",
-      destructive: "text-white",
-      outline: "text-foreground",
-      secondary: "text-secondary-foreground",
-      ghost: "text-foreground",
-    },
-    size: { default: "", sm: "text-sm", lg: "text-lg", icon: "" },
-  },
-  defaultVariants: { variant: "default", size: "default" },
-});
-
-type ButtonProps = React.ComponentProps<typeof Pressable> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean;
-    loading?: boolean;
-  };
-
-function Button({
-  className,
-  variant,
-  size,
-  asChild = false,
-  loading = false,
-  disabled,
-  children,
-  ...props
-}: ButtonProps) {
-  const Component = asChild ? Slot : Pressable;
-  const isDisabled = disabled || loading;
-  return (
-    <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
-      <Component
-        disabled={isDisabled}
-        className={cn(isDisabled && "opacity-50", buttonVariants({ variant, size }), className)}
-        {...props}
-      >
-        {loading && !asChild ? (
-          <ActivityIndicator
-            color={variant === "default" || !variant ? colors.primaryForeground : colors.primary}
-          />
-        ) : (
-          children
-        )}
-      </Component>
-    </TextClassContext.Provider>
-  );
+export type ButtonProps = ViewProps & {
+  variant?: "default" | "destructive" | "outline" | "secondary" | "ghost";
+  size?: "default" | "sm" | "lg" | "icon";
+  contentClassName?: string; height?: number; disabled?: boolean; loading?: boolean;
+  onPress?: () => void; children?: ReactNode;
+};
+export function Button({ className, style, variant = "default", size = "default", height, contentClassName, disabled, loading, children, onPress, accessibilityLabel, ...props }: ButtonProps) {
+  const buttonHeight = height ?? (size === "lg" ? 56 : size === "icon" ? 48 : size === "sm" ? 48 : 52);
+  const Loading = () => <ProgressView modifiers={[tint(variant === "default" ? colors.primaryForeground : colors.primary)]} />;
+  return <TextClassContext.Provider value={cn("text-sm font-semibold", variant === "default" ? "text-primary-foreground" : variant === "destructive" ? "text-white" : "text-foreground")}>
+    <View {...props} accessibilityLabel={accessibilityLabel} className={className} style={[{ height: buttonHeight, ...(size === "icon" ? { width: 48 } : {}) }, style]}>
+      <Host colorScheme="light" seedColor={variant === "destructive" ? colors.destructive : variant === "secondary" ? colors.secondary : colors.primary} style={{ flex: 1, width: "100%" }}>
+        <NativeButton modifiers={accessibilityLabel ? [nativeLabel(accessibilityLabel)] : []} disabled={!!disabled || !!loading} onPress={onPress} variant={variant === "ghost" ? "text" : variant === "outline" ? "outlined" : "filled"} style={{ width: "100%", height: buttonHeight }}>
+          {loading ? <Loading /> : <RNHostView matchContents><View pointerEvents="none" accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: !!disabled || !!loading, busy: !!loading }} className={cn("flex-row items-center justify-center gap-2", contentClassName)}>
+            {children}
+          </View></RNHostView>}
+        </NativeButton>
+      </Host>
+    </View>
+  </TextClassContext.Provider>;
 }
-
-export { Button, buttonTextVariants, buttonVariants };
-export type { ButtonProps };

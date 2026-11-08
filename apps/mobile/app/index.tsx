@@ -1,5 +1,6 @@
+import { Spinner } from "@/components/ui/spinner";
 import { Redirect } from "expo-router";
-import { View, ActivityIndicator } from "react-native";
+import { View, } from "react-native";
 import { useAuth } from "@/lib/auth";
 import { colors } from "@/lib/theme";
 
@@ -9,7 +10,7 @@ export default function Index() {
   if (!ready) {
     return (
       <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color={colors.primary} />
+        <Spinner color={colors.primary} />
       </View>
     );
   }
