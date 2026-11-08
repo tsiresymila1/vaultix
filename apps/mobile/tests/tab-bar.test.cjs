@@ -25,11 +25,21 @@ test("tabs align one icon with its label, preserve navigation events and hide fo
   const bar = tabs.props.tabBar(props);
   assert.equal(bar.props.style.flexDirection, "row");
   assert.equal(bar.props.style.paddingBottom, 24);
-  const buttons = bar.children[0];
+  assert.equal(bar.props.style.width, "100%");
+  const columns = bar.children[0];
+  const buttons = columns.map(column => {
+    assert.equal(typeof column.props.style, "object");
+    assert.equal(column.props.style.flexGrow, 1);
+    assert.equal(column.props.style.flexShrink, 1);
+    assert.equal(column.props.style.flexBasis, 0);
+    assert.equal(column.props.style.minWidth, 0);
+    return column.children[0];
+  });
   assert.equal(buttons.length, 3);
   for (const button of buttons) {
-    const style = button.props.style({ pressed: false });
-    assert.equal(style.flex, 1); assert.equal(style.alignItems, "center");
+    assert.equal(typeof button.props.style, "object");
+    const style = button.props.style;
+    assert.equal(style.width, "100%"); assert.equal(style.alignItems, "center");
     assert.equal(button.children.length, 2);
     assert.equal(button.children[0].props.style.alignItems, "center");
     assert.equal(button.children[1].type, "Text");
