@@ -28,7 +28,7 @@
     "expo-device-hub": "^0.2.1",
     "expo-font": "*",
     "expo-linking": "*",
-    "expo-modules-core": "~57.0.7",
+    "expo-modules-core": "~57.0.25",
     "expo-router": "*",
     "expo-secure-store": "*",
     "expo-status-bar": "*",
