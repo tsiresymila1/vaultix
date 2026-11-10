@@ -17,7 +17,7 @@ function Text({
   const Component = asChild ? Slot : RNText;
   return (
     <Component
-      className={cn("text-base text-foreground font-sans", textClass, className)}
+      className={cn("text-sm text-foreground font-sans", textClass, className)}
       style={[{ fontFamily: /font-bold/.test(className ?? "") ? "Poppins_700Bold" : /font-semibold/.test(`${textClass} ${className}`) ? "Poppins_600SemiBold" : /font-medium/.test(className ?? "") ? "Poppins_500Medium" : "Poppins_400Regular" }, style]}
       {...props}
     />

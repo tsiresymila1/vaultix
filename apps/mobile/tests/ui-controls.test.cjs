@@ -20,7 +20,7 @@ test("native input does not echo typing; generated values, clearing and OTP sani
   const Field = Object.assign(() => {}, { Placeholder: "Placeholder" });
   const nativeState = { set: value => { lastNativeValue = value; writes.push(value); } };
   const modules = { react: React, "react-native": { View: "View" },
-    "@expo/ui/jetpack-compose": { Host: "Host", OutlinedTextField: Field, Text: "Text", useNativeState: () => nativeState },
+    "@expo/ui/jetpack-compose": { Host: "Host", OutlinedTextField: Field, Text: "Text", Shape: { RoundedCorner: value => value }, useNativeState: () => nativeState },
     "@expo/ui/jetpack-compose/modifiers": { fillMaxWidth: () => ({}), semantics: value => value },
     "@/lib/theme": { colors: {} }, "@/lib/utils": { cn: (...values) => values.join(" ") } };
   const { Input } = load("components/ui/input.android.tsx", modules, React);
@@ -39,7 +39,7 @@ test("native buttons keep stable geometry and disable the native action while sa
   const React = { createElement: element };
   const modules = { "react-native": { View: "View" },
     "@expo/ui/jetpack-compose": { Host: "Host", Button: "FilledButton", TextButton: "TextButton", OutlinedButton: "OutlinedButton", RNHostView: "RNHostView", FilledIconButton: "FilledIconButton", IconButton: "IconButton", OutlinedIconButton: "OutlinedIconButton" },
-    "@expo/ui/jetpack-compose/modifiers": { fillMaxSize: () => ({}), semantics: value => value },
+    "@expo/ui/jetpack-compose/modifiers": { clickable: onClick => ({ onClick }), fillMaxSize: () => ({}), semantics: value => value },
     "./text": { Text: "Text", TextClassContext: { Provider: "TextProvider" } },
     "@/lib/theme": { colors: { primary: "green", destructive: "red" } }, "@/lib/utils": { cn: (...values) => values.join(" ") } };
   const { Button } = load("components/ui/button.android.tsx", modules, React);
@@ -50,6 +50,10 @@ test("native buttons keep stable geometry and disable the native action while sa
   const action = walk(tree).find(node => node.type === "FilledIconButton"); assert.equal(action.props.enabled, false);
   const idle = walk(Button({ onPress: () => calls++ })).find(node => node.type === "FilledButton");
   assert.equal(idle.props.enabled, true); idle.props.onClick(); assert.equal(calls, 1);
+  const content = walk(Button({ onPress: () => calls++ })).find(node => node.type === "RNHostView");
+  content.props.modifiers[0].onClick(); assert.equal(calls, 2);
+  const disabledContent = walk(Button({ disabled: true, onPress: () => calls++ })).find(node => node.type === "RNHostView");
+  disabledContent.props.modifiers[0].onClick(); assert.equal(calls, 2);
   assert.ok(walk(Button({ variant: "outline" })).some(node => node.type === "OutlinedButton"));
 });
 
@@ -60,12 +64,13 @@ test("native lists retain refresh for empty content and apply padding once", asy
     "@expo/ui/jetpack-compose/modifiers": { fillMaxSize: () => ({}), fillMaxWidth: () => ({}) }, "@/lib/theme": { colors: {} } };
   const { ScreenScroll } = load("components/ui/screen-scroll.android.tsx", modules, React);
   let calls = 0;
-  const nodes = walk(ScreenScroll({ children: [], refreshing: true, onRefresh: async () => calls++, contentContainerStyle: { paddingHorizontal: 24, paddingBottom: 12 } }));
+  const nodes = walk(ScreenScroll({ children: [], refreshing: true, onRefresh: async () => calls++, contentContainerStyle: { paddingHorizontal: 24, paddingBottom: 12, gap: 22 } }));
   const refresh = nodes.find(node => node.type === "PullToRefreshBox");
   assert.equal(refresh.props.isRefreshing, true); refresh.props.onRefresh(); await Promise.resolve(); assert.equal(calls, 1);
   const list = nodes.find(node => node.type === "LazyColumn");
   assert.equal(list.props.contentPadding.start, 24); assert.equal(list.props.contentPadding.bottom, 12);
   assert.equal(list.children[0].length, 0);
+  assert.equal(list.props.verticalArrangement.spacedBy, 22);
   assert.ok(walk(ScreenScroll({ horizontal: true })).some(node => node.type === "LazyRow"));
 });
 

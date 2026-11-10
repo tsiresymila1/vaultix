@@ -8,7 +8,7 @@ export function ScreenScroll({ children, horizontal, contentContainerStyle, onRe
   const padding = StyleSheet.flatten(contentContainerStyle) ?? {};
   const numeric = (value: unknown) => typeof value === "number" ? value : 0;
   const List = horizontal ? LazyRow : LazyColumn;
-  const content = <List modifiers={[fillMaxSize()]} contentPadding={{ start: numeric(padding.paddingLeft ?? padding.paddingHorizontal ?? padding.padding ?? 0), end: numeric(padding.paddingRight ?? padding.paddingHorizontal ?? padding.padding ?? 0), top: numeric(padding.paddingTop ?? padding.paddingVertical ?? padding.padding ?? 0), bottom: numeric(padding.paddingBottom ?? padding.paddingVertical ?? padding.padding ?? 0) }}>
+  const content = <List {...(horizontal ? { horizontalArrangement: { spacedBy: numeric(padding.gap ?? padding.columnGap) } } : { verticalArrangement: { spacedBy: numeric(padding.gap ?? padding.rowGap) } })} modifiers={[fillMaxSize()]} contentPadding={{ start: numeric(padding.paddingLeft ?? padding.paddingHorizontal ?? padding.padding ?? 0), end: numeric(padding.paddingRight ?? padding.paddingHorizontal ?? padding.padding ?? 0), top: numeric(padding.paddingTop ?? padding.paddingVertical ?? padding.padding ?? 0), bottom: numeric(padding.paddingBottom ?? padding.paddingVertical ?? padding.padding ?? 0) }}>
     {Children.toArray(children).map((child, index) => <RNHostView key={typeof child === "object" && "key" in child ? child.key ?? index : index} matchContents={horizontal ? true : { vertical: true }} modifiers={horizontal ? [] : [fillMaxWidth()]}>
       <View style={horizontal ? undefined : { width: "100%" }}>{child}</View>
     </RNHostView>)}

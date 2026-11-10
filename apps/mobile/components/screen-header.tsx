@@ -16,7 +16,7 @@ export function ScreenHeader({
   return (
     <View className="flex-row items-center justify-between gap-4 px-6 pt-5 pb-5">
       <View className="flex-1">
-        <Text className="text-[28px] font-semibold text-foreground">{title}</Text>
+        <Text className="text-[24px] font-semibold text-foreground">{title}</Text>
         {subtitle ? (
           <Text className="mt-1 text-sm text-muted-foreground" numberOfLines={1}>
             {subtitle}

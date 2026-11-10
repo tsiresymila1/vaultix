@@ -35,7 +35,7 @@ export default function TabsLayout() {
                   const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
                   if (!focused && !event.defaultPrevented) navigation.navigate(route.name, route.params);
                 }}>
-                <NavigationBarItem.Icon><RNHostView modifiers={[size(24, 24)]}><View accessible={false} pointerEvents="none" style={{ width: 24, height: 24 }}><Icon size={24} strokeWidth={1.7} color={focused ? colors.primary : colors.mutedForeground} /></View></RNHostView></NavigationBarItem.Icon>
+                <NavigationBarItem.Icon><RNHostView matchContents modifiers={[size(24, 24)]}><View accessible={false} pointerEvents="none" style={{ width: 24, height: 24 }}><Icon size={24} strokeWidth={1.7} color={focused ? colors.primary : colors.mutedForeground} /></View></RNHostView></NavigationBarItem.Icon>
                 <NavigationBarItem.Label><Text maxLines={1} style={{ fontFamily: "Poppins_500Medium", fontSize: 11 }}>{title}</Text></NavigationBarItem.Label>
               </NavigationBarItem>;
             })}

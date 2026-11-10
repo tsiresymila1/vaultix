@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { View, type ViewProps } from "react-native";
 import { Host, Button as NativeButton, OutlinedButton, TextButton, RNHostView, CircularProgressIndicator, IconButton, FilledIconButton, OutlinedIconButton } from "@expo/ui/jetpack-compose";
-import { fillMaxSize, semantics, size as nativeSize } from "@expo/ui/jetpack-compose/modifiers";
+import { clickable, fillMaxSize, semantics, size as nativeSize } from "@expo/ui/jetpack-compose/modifiers";
 import { TextClassContext } from "./text";
 import { cn } from "@/lib/utils";
 import { colors } from "@/lib/theme";
@@ -21,7 +21,7 @@ export function Button({ className, style, variant = "default", size = "default"
     <View {...props} accessibilityLabel={accessibilityLabel} className={className} style={[{ height: buttonHeight, ...(size === "icon" ? { width: 48 } : {}) }, style]}>
       <Host colorScheme="light" seedColor={variant === "destructive" ? colors.destructive : colors.primary} style={{ flex: 1, width: "100%" }}>
         <Component enabled={!disabled && !loading} onClick={onPress} modifiers={[fillMaxSize(), semantics({ contentDescription: accessibilityLabel })]} colors={{ containerColor }}>
-          {loading ? <Loading /> : <RNHostView matchContents><View pointerEvents="none" accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: !!disabled || !!loading, busy: !!loading }} className={cn("flex-row items-center justify-center gap-2", contentClassName)}>
+          {loading ? <Loading /> : <RNHostView matchContents modifiers={[clickable(() => { if (!disabled && !loading) onPress?.(); })]}><View pointerEvents="none" accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: !!disabled || !!loading, busy: !!loading }} className={cn("flex-row items-center justify-center gap-2", contentClassName)}>
             {children}
           </View></RNHostView>}
         </Component>
