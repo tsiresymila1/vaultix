@@ -34,16 +34,9 @@ npx expo run:ios      # or: npx expo run:android
 
 ## Native Material UI
 
-All mobile screens use Expo UI controls: Material / Jetpack Compose on Android,
-SwiftUI on iOS. This includes authentication and password forms, buttons,
-segmented filters, list rows, loading indicators, scrolling, pull-to-refresh,
-and dialogs. Android navigation uses Material `NavigationBar`; iOS uses Expo
-Router's native tabs. React Native remains the screen layout and typography
-layer, hosted through `RNHostView` where Compose/SwiftUI embeds screen content.
-The shared auth, encryption, favorites and autofill behavior is unchanged.
+Mobile controls use React Native Paper on Android and iOS: Material dialogs, fields, lists, segmented filters and bottom navigation. React Native scrolling preserves form spacing and pull-to-refresh. Poppins and Vaultix colors are configured through PaperProvider.
 
-Rebuild the native app after installing `@expo/ui`; restarting Metro alone cannot
-add the native module. Verify on device: login with email/OTP, switch all tabs,
+Verify on device: login with email/OTP, switch all tabs,
 refresh empty/populated lists, search/filter/favorite, create/edit a password,
 generate a password and toggle visibility, cancel unlock, enter a wrong password,
 retry, then unlock successfully and open another entry without a second prompt.

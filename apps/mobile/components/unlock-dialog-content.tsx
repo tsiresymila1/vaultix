@@ -1,6 +1,5 @@
 import { View } from "react-native";
-import { BottomSheet } from "@expo/ui";
-import { interactiveDismissDisabled } from "@expo/ui/swift-ui/modifiers";
+import { Portal, Dialog } from "react-native-paper";
 import { Eye, EyeOff } from "lucide-react-native";
 import { colors } from "@/lib/theme";
 import { Text } from "./ui/text";
@@ -14,7 +13,7 @@ export type UnlockDialogContentProps = {
   setVisiblePassword: (value: boolean | ((current: boolean) => boolean)) => void;
 };
 export function UnlockDialogContent({ visible, busy, error, password, visiblePassword, onCancel, submit, setPassword, setError, setVisiblePassword }: UnlockDialogContentProps) {
-  return <BottomSheet isPresented={visible} onDismiss={() => { if (!busy) onCancel(); }} modifiers={[interactiveDismissDisabled(busy)]} containerColor={colors.card} snapPoints={["full"]}>
+  return <Portal><Dialog visible={visible} dismissable={!busy} onDismiss={() => { if (!busy) onCancel(); }} style={{ backgroundColor: colors.card }}>
     <View className="px-6 py-8">
       <View accessibilityViewIsModal className="gap-4 rounded-[28px] bg-card p-6">
         <Text accessibilityRole="header" className="text-xl font-semibold">Déverrouiller les identifiants</Text>
@@ -32,5 +31,5 @@ export function UnlockDialogContent({ visible, busy, error, password, visiblePas
         </View>
       </View>
     </View>
-  </BottomSheet>;
+  </Dialog></Portal>;
 }

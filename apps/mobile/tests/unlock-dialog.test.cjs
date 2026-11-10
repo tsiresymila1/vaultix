@@ -28,33 +28,3 @@ test("unlock dialog prevents empty/duplicate submissions, reports errors and cle
   view.setVisiblePassword(true); props.visible = false; render(); view = render();
   assert.equal(view.password, ""); assert.equal(view.error, ""); assert.equal(view.visiblePassword, false);
 });
-
-test("Material unlock preserves masking, retry, busy dismissal and action callbacks", () => {
-  const changes = [], nativeClears = [];
-  const React = { createElement: (type, props, ...children) => ({ type, props: props ?? {}, children }), useEffect: fn => fn() };
-  const slots = name => Object.assign(() => {}, Object.fromEntries(["Title", "Text", "DismissButton", "ConfirmButton", "Label", "TrailingIcon"].map(slot => [slot, `${name}.${slot}`])));
-  const modules = {
-    react: React,
-    "@expo/ui/jetpack-compose": { useNativeState: () => ({ set: value => nativeClears.push(value) }), AlertDialog: slots("Dialog"), OutlinedTextField: slots("Field"), Host: "Host", Column: "Column", Text: "Text", TextButton: "TextButton", Button: "Button" },
-    "@expo/ui/jetpack-compose/modifiers": { fillMaxWidth: () => "fillMaxWidth", verticalScroll: () => "verticalScroll" }, "@/lib/theme": { colors: {} },
-  };
-  const context = vm.createContext({ React, exports: {}, require: name => modules[name] });
-  const source = readFileSync(path.join(__dirname, "../components/unlock-dialog-content.android.tsx"), "utf8");
-  vm.runInContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React } }).outputText, context);
-  const props = { visible: true, busy: false, error: "incorrect", password: "secret", visiblePassword: false,
-    onCancel: () => changes.push("cancel"), submit: async () => changes.push("submit"), setPassword: value => changes.push(["password", value]),
-    setError: value => changes.push(["error", value]), setVisiblePassword: value => changes.push(["visible", typeof value === "function" ? value(false) : value]) };
-  const render = () => context.exports.UnlockDialogContent(props);
-  const walk = node => !node || typeof node !== "object" ? [] : [node, ...node.children.flat(Infinity).flatMap(walk)];
-  let tree = render(), nodes = walk(tree);
-  const field = nodes.find(node => node.type === modules["@expo/ui/jetpack-compose"].OutlinedTextField);
-  assert.equal(field.props.visualTransformation, "password");
-  assert.equal(field.props.keyboardOptions.autoCorrectEnabled, false);
-  nodes.find(node => node.type === "Button").props.onClick();
-  assert.deepEqual(changes, [["password", ""], ["error", ""], ["visible", false]]);
-  changes.length = 0; props.busy = true; tree = render();
-  const dialog = tree.children[0]; assert.equal(dialog.props.properties.dismissOnBackPress, false);
-  dialog.props.onDismissRequest(); assert.deepEqual(changes, []);
-  assert.equal(walk(tree).find(node => node.type === "Button").props.enabled, false);
-  props.visible = false; props.password = ""; assert.equal(render(), null); assert.deepEqual(nativeClears, [""]);
-});

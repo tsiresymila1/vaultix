@@ -1,3 +1,4 @@
+import { PaperProvider, MD3LightTheme, configureFonts } from "react-native-paper";
 import { useFonts } from "expo-font";
 import { Poppins_400Regular } from "@expo-google-fonts/poppins/400Regular";
 import { Poppins_500Medium } from "@expo-google-fonts/poppins/500Medium";
@@ -16,7 +17,7 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
   return (
     <SafeAreaProvider>
-      <MaterialDialogProvider><AuthProvider>
+      <PaperProvider theme={{ ...MD3LightTheme, colors: { ...MD3LightTheme.colors, primary: colors.primary, background: colors.background, surface: colors.card, onSurface: colors.foreground }, fonts: configureFonts({ config: { fontFamily: "Poppins_400Regular" } }) }}><MaterialDialogProvider><AuthProvider>
         <StatusBar style="dark" />
         <Stack
           screenOptions={{
@@ -25,7 +26,7 @@ export default function RootLayout() {
             animation: "fade",
           }}
         />
-      </AuthProvider></MaterialDialogProvider>
+      </AuthProvider></MaterialDialogProvider></PaperProvider>
     </SafeAreaProvider>
   );
 }

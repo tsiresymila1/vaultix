@@ -1,12 +1,10 @@
-import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { Tabs } from "expo-router";
+import { BottomNavigation } from "react-native-paper";
+import { KeyRound, Vault, Settings } from "lucide-react-native";
 import { colors } from "@/lib/theme";
-
-export const unstable_settings = { initialRouteName: "passwords" };
+const icons = { passwords: KeyRound, index: Vault, settings: Settings };
 export default function TabsLayout() {
-  return <NativeTabs tintColor={colors.primary} backgroundColor={colors.background} disableTransparentOnScrollEdge
-    labelStyle={{ fontFamily: "Poppins_500Medium", fontSize: 11 }}>
-    <NativeTabs.Trigger name="passwords"><NativeTabs.Trigger.Icon sf="key.fill" /><NativeTabs.Trigger.Label>Identifiants</NativeTabs.Trigger.Label></NativeTabs.Trigger>
-    <NativeTabs.Trigger name="index"><NativeTabs.Trigger.Icon sf="lock.square.fill" /><NativeTabs.Trigger.Label>Coffres</NativeTabs.Trigger.Label></NativeTabs.Trigger>
-    <NativeTabs.Trigger name="settings"><NativeTabs.Trigger.Icon sf="gearshape" /><NativeTabs.Trigger.Label>Réglages</NativeTabs.Trigger.Label></NativeTabs.Trigger>
-  </NativeTabs>;
+ return <Tabs initialRouteName="passwords" screenOptions={{ headerShown: false, tabBarHideOnKeyboard: true }} tabBar={({ state, navigation, insets }) => <BottomNavigation.Bar navigationState={state} safeAreaInsets={insets} style={{ backgroundColor: colors.background }} activeColor={colors.primary} inactiveColor={colors.mutedForeground} onTabPress={({ route, preventDefault }) => { const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true }); if (event.defaultPrevented) preventDefault(); else navigation.navigate(route.name, route.params); }} renderIcon={({ route, color }) => { const Icon = icons[route.name as keyof typeof icons]; return Icon ? <Icon size={24} color={color} /> : null; }} getLabelText={({ route }) => route.name === "passwords" ? "Identifiants" : route.name === "index" ? "Coffres" : "Réglages"} />}>
+ <Tabs.Screen name="passwords" /><Tabs.Screen name="index" /><Tabs.Screen name="settings" />
+ </Tabs>;
 }
