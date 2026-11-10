@@ -17,7 +17,7 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
   return (
     <SafeAreaProvider>
-      <PaperProvider theme={{ ...MD3LightTheme, colors: { ...MD3LightTheme.colors, primary: colors.primary, background: colors.background, surface: colors.card, onSurface: colors.foreground }, fonts: configureFonts({ config: { fontFamily: "Poppins_400Regular" } }) }}><MaterialDialogProvider><AuthProvider>
+      <PaperProvider theme={{ ...MD3LightTheme, colors: { ...MD3LightTheme.colors, primary: colors.primary, onPrimary: colors.primaryForeground, primaryContainer: colors.elevated, onPrimaryContainer: colors.primaryForeground, secondary: colors.primary, onSecondary: colors.primaryForeground, secondaryContainer: colors.elevated, onSecondaryContainer: colors.primaryForeground, tertiary: colors.primary, onTertiary: colors.primaryForeground, tertiaryContainer: colors.elevated, onTertiaryContainer: colors.primaryForeground, surfaceVariant: colors.secondary, onSurfaceVariant: colors.mutedForeground, outline: colors.border, outlineVariant: colors.border, inversePrimary: colors.primary, surfaceDisabled: colors.secondary, error: colors.destructive, elevation: { level0: "transparent", level1: colors.card, level2: colors.card, level3: colors.card, level4: colors.card, level5: colors.card }, background: colors.background, surface: colors.card, onSurface: colors.foreground }, fonts: configureFonts({ config: { fontFamily: "Poppins_400Regular" } }) }}><MaterialDialogProvider><AuthProvider>
         <StatusBar style="dark" />
         <Stack
           screenOptions={{

@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { Children, cloneElement, isValidElement, type ReactNode } from "react";
+import { TextInput } from "react-native-paper";
 import { View } from "react-native";
 import { ChevronLeft, Eye, EyeOff, Sparkles } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
@@ -46,8 +47,7 @@ export function FormSection({ title, children }: { title: string; children: Reac
 export function FormField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <View className="gap-2">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      {children}
+      {Children.map(children, child => isValidElement(child) && child.type === Input ? cloneElement(child as React.ReactElement<import("@/components/ui/input").InputProps>, { label }) : child)}
     </View>
   );
 }
@@ -78,21 +78,16 @@ export function SecretInput({
       </View>
       <View className="flex-row items-center gap-2">
         <Input
+          label="Password"
           placeholder={placeholder}
+          right={<TextInput.Icon icon={visible ? "eye-off" : "eye"} onPress={onToggleVisible} accessibilityLabel={visible ? "Hide password" : "Show password"} />}
           secureTextEntry={!visible}
           autoCapitalize="none"
           value={value}
           onChangeText={onChangeText}
           className="flex-1"
         />
-        <Button variant="ghost"
-          size="icon" accessibilityLabel={visible ? "Hide password" : "Show password"}
-          onPress={onToggleVisible}
-          className="h-9 w-9 items-center justify-center"
 
-        >
-          {visible ? <EyeOff size={18} color={colors.mutedForeground} /> : <Eye size={18} color={colors.mutedForeground} />}
-        </Button>
       </View>
     </View>
   );
