@@ -13,9 +13,10 @@ import { unsealKey, decryptSecret } from "@/lib/crypto";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useMaterialDialog } from "@/components/material-dialog";
-import { colors } from "@/lib/theme";
+import { useAppTheme } from "@/lib/theme";
 
 export default function ProjectDetail() {
+  const { colors } = useAppTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session } = useAuth();
   const { user } = db.useAuth();
@@ -49,7 +50,7 @@ export default function ProjectDetail() {
     } catch { dialog.alert("Erreur", "Impossible de déchiffrer cette valeur. Vérifiez votre accès au projet."); }
     finally { setBusy(null); }
   };
-  return <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+  return <SafeAreaView className="flex-1 bg-background" style={{ backgroundColor: colors.background }} edges={["top"]}>
     <ScreenScroll contentContainerStyle={{ padding: 24 }}>
       <Button variant="ghost" size="icon" accessibilityRole="button" accessibilityLabel="Retour aux coffres" onPress={() => router.back()} className="mb-5 h-12 w-12 justify-center"><ArrowLeft color={colors.foreground} /></Button>
       {isLoading ? <Spinner color={colors.primary} /> : error ? <Text className="text-destructive">Impossible de charger le projet.</Text> : !vault ? <Text>Projet introuvable ou accès retiré.</Text> : <>

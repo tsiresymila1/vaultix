@@ -13,9 +13,10 @@ import { Text } from "@/components/ui/text";
 import { useAuth } from "@/lib/auth";
 import { generatePassword } from "@/lib/crypto";
 import { createPassword } from "@/lib/passwords";
-import { colors } from "@/lib/theme";
+import { useAppTheme } from "@/lib/theme";
 
 export default function NewPassword() {
+  const { colors } = useAppTheme();
   const dialog = useMaterialDialog();
   const { session } = useAuth();
   const router = useRouter();
@@ -34,7 +35,7 @@ export default function NewPassword() {
 
   const onSave = async () => {
     if (!title.trim() || !password) {
-      dialog.alert("Missing information", "Title and password are required.");
+      dialog.alert("Informations manquantes", "Le titre et le mot de passe sont obligatoires.");
       return;
     }
     if (!session) return;
@@ -49,15 +50,15 @@ export default function NewPassword() {
       });
       router.back();
     } catch {
-      dialog.alert("Error", "Failed to save password.");
+      dialog.alert("Erreur", "Impossible d’enregistrer le mot de passe.");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <FormScreenHeader title="New password" subtitle="Add a login to your vault" onBack={() => router.back()} />
+    <SafeAreaView className="flex-1 bg-background" style={{ backgroundColor: colors.background }} edges={["top"]}>
+      <FormScreenHeader title="Nouvel identifiant" subtitle="Ajoutez un accès à votre coffre" onBack={() => router.back()} />
 
       <ScreenScroll
         contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 6, paddingBottom: 40, gap: 22 }}
@@ -65,22 +66,22 @@ export default function NewPassword() {
         showsVerticalScrollIndicator={false}
       >
         <FadeIn>
-          <FormSection title="Login details">
-            <FormField label="Title">
-              <Input placeholder="GitHub, Netflix, Banking…" value={title} onChangeText={setTitle} autoFocus />
+          <FormSection title="Détails de connexion">
+            <FormField label="Titre">
+              <Input placeholder="GitHub, Netflix, banque…" value={title} onChangeText={setTitle} autoFocus />
             </FormField>
-            <FormField label="Website">
+            <FormField label="Site web">
               <Input
-                placeholder="example.com"
+                placeholder="exemple.fr"
                 autoCapitalize="none"
                 keyboardType="url"
                 value={url}
                 onChangeText={setUrl}
               />
             </FormField>
-            <FormField label="Username or email">
+            <FormField label="Nom d’utilisateur ou e-mail">
               <Input
-                placeholder="you@example.com"
+                placeholder="nom@exemple.fr"
                 autoCapitalize="none"
                 value={username}
                 onChangeText={setUsername}
@@ -90,14 +91,14 @@ export default function NewPassword() {
         </FadeIn>
 
         <FadeIn delay={60}>
-          <FormSection title="Security">
+          <FormSection title="Sécurité">
             <SecretInput
               value={password}
               onChangeText={setPassword}
               visible={show}
               onToggleVisible={() => setShow((value) => !value)}
               onGenerate={onGenerate}
-              placeholder="Enter or generate a password"
+              placeholder="Saisissez ou générez un mot de passe"
             />
           </FormSection>
         </FadeIn>
@@ -105,7 +106,7 @@ export default function NewPassword() {
         <FadeIn delay={100}>
           <FormSection title="Notes">
             <Input
-              placeholder="Recovery details, account context…"
+              placeholder="Informations de récupération, contexte du compte…"
               value={notes}
               onChangeText={setNotes}
               multiline
@@ -117,10 +118,10 @@ export default function NewPassword() {
         <View>
           <Button loading={saving} onPress={onSave} disabled={!title.trim() || !password}>
             <Save size={18} color={colors.primaryForeground} />
-            <Text>Save password</Text>
+            <Text>Enregistrer dans le coffre</Text>
           </Button>
           <Text className="mt-3 text-center text-xs text-muted-foreground">
-            Encrypted locally before it leaves this device
+            Chiffré sur cet appareil avant synchronisation
           </Text>
         </View>
       </ScreenScroll>

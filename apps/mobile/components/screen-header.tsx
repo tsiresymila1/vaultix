@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
 import { View } from "react-native";
+import { Logo } from "@/components/Logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Text } from "@/components/ui/text";
+import { useAppTheme } from "@/lib/theme";
 
 export function ScreenHeader({
-  eyebrow,
+  eyebrow = "ESPACE PERSONNEL",
   title,
   subtitle,
   action,
@@ -13,17 +16,21 @@ export function ScreenHeader({
   subtitle?: string;
   action?: ReactNode;
 }) {
+  const { colors } = useAppTheme();
   return (
-    <View className="flex-row items-center justify-between gap-4 px-6 pt-5 pb-5">
-      <View className="flex-1">
-        <Text className="text-[24px] font-semibold text-foreground">{title}</Text>
-        {subtitle ? (
-          <Text className="mt-1 text-sm text-muted-foreground" numberOfLines={1}>
-            {subtitle}
-          </Text>
-        ) : null}
+    <View style={{ backgroundColor: colors.background }}>
+      <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
+        <Logo size={20} />
+        <ThemeToggle />
       </View>
-      {action}
+      <View className="flex-row items-end justify-between gap-3 px-5 pb-4 pt-2">
+        <View className="flex-1">
+          <Text className="mb-1 text-[11px] font-semibold tracking-[1.2px] text-primary">{eyebrow}</Text>
+          <Text className="text-[29px] font-semibold leading-9 text-foreground">{title}</Text>
+          {subtitle ? <Text className="mt-1 text-sm text-muted-foreground">{subtitle}</Text> : null}
+        </View>
+        {action}
+      </View>
     </View>
   );
 }
@@ -31,7 +38,7 @@ export function ScreenHeader({
 export function SectionHeader({ title, action }: { title: string; action?: ReactNode }) {
   return (
     <View className="mb-3 flex-row items-center justify-between">
-      <Text className="text-base font-semibold text-foreground">{title}</Text>
+      <Text className="text-sm font-semibold text-foreground">{title}</Text>
       {action}
     </View>
   );

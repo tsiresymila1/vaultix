@@ -28,9 +28,10 @@ import { Button } from "@/components/ui/button";
 import { ListRow } from "@/components/ui/list-row";
 import { Text } from "@/components/ui/text";
 import { FadeIn } from "@/components/motion";
-import { colors } from "@/lib/theme";
+import { useAppTheme } from "@/lib/theme";
 
 export default function PasswordDetail() {
+  const { colors } = useAppTheme();
   const dialog = useMaterialDialog();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { entries, loading } = usePasswords();
@@ -78,12 +79,12 @@ export default function PasswordDetail() {
   const copy = async (value: string | null | undefined, label: string) => {
     if (!value) return;
     await Clipboard.setStringAsync(value);
-    dialog.alert("Copied", `${label} copied to clipboard.`);
+    dialog.alert("Copié", `${label} copié dans le presse-papiers.`);
   };
 
   const copyPassword = async () => {
     const decrypted = await ensureDecrypted();
-    if (decrypted) await copy(decrypted, "Password");
+    if (decrypted) await copy(decrypted, "Mot de passe");
   };
 
   const openWebsite = async () => {
@@ -95,23 +96,23 @@ export default function PasswordDetail() {
     try {
       await Linking.openURL(url);
     } catch {
-      dialog.alert("Can't open website", "Check that the website address is valid.");
+      dialog.alert("Impossible d’ouvrir le site", "Vérifiez l’adresse du site.");
     }
   };
 
   const onDelete = () => {
     if (!entry || !session) return;
-    dialog.alert("Delete password?", `\"${entry.title}\" will be permanently removed.`, [
-      { text: "Cancel", style: "cancel" },
+    dialog.alert("Supprimer cet identifiant ?", `\"${entry.title}\" sera définitivement supprimé.`, [
+      { text: "Annuler", style: "cancel" },
       {
-        text: "Delete",
+        text: "Supprimer",
         style: "destructive",
         onPress: async () => {
           try {
             await deletePassword(session, entry.id);
             router.back();
           } catch {
-            dialog.alert("Error", "Failed to delete this password.");
+            dialog.alert("Erreur", "Impossible de supprimer cet identifiant.");
           }
         },
       },
@@ -124,21 +125,21 @@ export default function PasswordDetail() {
   }, [id, entry?.encrypted_password]);
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" style={{ backgroundColor: colors.background }} edges={["top"]}>
       <View className="h-14 flex-row items-center justify-between px-4">
-        <IconButton label="Go back" onPress={() => router.back()}>
+        <IconButton label="Retour" onPress={() => router.back()}>
           <ChevronLeft size={22} color={colors.foreground} />
         </IconButton>
 
-        <Text className="text-base font-semibold text-foreground">Password</Text>
+        <Text className="text-base font-semibold text-foreground">Mot de passe</Text>
 
         <View className="w-[92px] flex-row justify-end gap-2">
           {entry && !entry.shared ? (
             <>
-              <IconButton label="Edit password" onPress={() => router.push(`/(app)/password/edit/${entry.id}`)}>
+              <IconButton label="Modifier l’identifiant" onPress={() => router.push(`/(app)/password/edit/${entry.id}`)}>
                 <Pencil size={18} color={colors.foreground} />
               </IconButton>
-              <IconButton label="Delete password" onPress={onDelete} destructive>
+              <IconButton label="Supprimer l’identifiant" onPress={onDelete} destructive>
                 <Trash2 size={18} color={colors.destructive} />
               </IconButton>
             </>
@@ -155,9 +156,9 @@ export default function PasswordDetail() {
           <View className="h-12 w-12 items-center justify-center bg-transparent">
             <KeyRound size={22} color={colors.mutedForeground} />
           </View>
-          <Text className="text-base font-semibold text-foreground">Password not found</Text>
+          <Text className="text-base font-semibold text-foreground">Identifiant introuvable</Text>
           <Text className="text-center text-sm text-muted-foreground">
-            This item may have been removed or is no longer shared with you.
+            Cet élément a été supprimé ou n’est plus partagé avec vous.
           </Text>
         </View>
       ) : (
@@ -174,18 +175,18 @@ export default function PasswordDetail() {
               <View className="mt-1 flex-row items-center gap-1.5">
                 {entry.shared ? <Users size={13} color={colors.accent} /> : null}
                 <Text className="max-w-[280px] text-sm text-muted-foreground" numberOfLines={1}>
-                  {entry.shared ? "Shared with you" : entry.website_url || "Personal password"}
+                  {entry.shared ? "Partagé avec vous" : entry.website_url || "Mot de passe personnel"}
                 </Text>
               </View>
             </View>
           </FadeIn>
 
           <FadeIn delay={40}>
-            <View className="mb-8 flex-row overflow-hidden rounded-2xl bg-background">
+            <View className="mb-8 flex-row overflow-hidden rounded-2xl" style={{ backgroundColor: colors.card }}>
               <QuickAction
                 icon={<UserRound size={20} color={entry.username ? colors.primary : colors.mutedForeground} />}
                 label="Identifiant"
-                onPress={() => copy(entry.username, "Username")}
+                onPress={() => copy(entry.username, "Nom d’utilisateur")}
                 disabled={!entry.username}
               />
               <View className="w-px bg-border" />
@@ -198,7 +199,7 @@ export default function PasswordDetail() {
               <View className="w-px bg-border" />
               <QuickAction
                 icon={<ExternalLink size={20} color={entry.website_url ? colors.accent : colors.mutedForeground} />}
-                label="Open site"
+                label="Ouvrir le site"
                 onPress={openWebsite}
                 disabled={!entry.website_url}
               />
@@ -207,26 +208,26 @@ export default function PasswordDetail() {
 
           <FadeIn delay={80}>
             <Text className="mb-3 text-sm font-semibold text-foreground">Détails de connexion</Text>
-            <View className="overflow-hidden rounded-2xl bg-background px-4">
+            <View className="overflow-hidden rounded-2xl px-4" style={{ backgroundColor: colors.card }}>
               <DetailRow
                 icon={<UserRound size={18} color={colors.mutedForeground} />}
                 label="Identifiant"
-                value={entry.username || "Not added"}
+                value={entry.username || "Non renseigné"}
                 muted={!entry.username}
                 action={entry.username ? <Copy size={17} color={colors.primary} /> : undefined}
-                onAction={entry.username ? () => copy(entry.username, "Username") : undefined}
+                onAction={entry.username ? () => copy(entry.username, "Nom d’utilisateur") : undefined}
               />
               <DetailRow
                 icon={<KeyRound size={18} color={colors.mutedForeground} />}
                 label="Mot de passe"
-                value={revealing ? "Decrypting..." : visible && password ? password : "••••••••••••"}
+                value={revealing ? "Déchiffrement…" : visible && password ? password : "••••••••••••"}
                 action={visible ? <EyeOff size={18} color={colors.primary} /> : <Eye size={18} color={colors.primary} />}
                 onAction={toggleReveal}
               />
               <DetailRow
                 icon={<Globe2 size={18} color={colors.mutedForeground} />}
                 label="Site associé"
-                value={entry.website_url || "Not added"}
+                value={entry.website_url || "Non renseigné"}
                 muted={!entry.website_url}
                 action={entry.website_url ? <ExternalLink size={17} color={colors.accent} /> : undefined}
                 onAction={entry.website_url ? openWebsite : undefined}
@@ -294,6 +295,7 @@ function QuickAction({
   disabled?: boolean;
   busy?: boolean;
 }) {
+  const { colors } = useAppTheme();
   return (
     <Button variant="ghost"
       accessibilityLabel={label}

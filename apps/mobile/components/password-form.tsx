@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Text } from "@/components/ui/text";
-import { colors } from "@/lib/theme";
+import { useAppTheme } from "@/lib/theme";
 
 export function FormScreenHeader({
   title,
@@ -17,6 +17,7 @@ export function FormScreenHeader({
   subtitle: string;
   onBack: () => void;
 }) {
+  const { colors } = useAppTheme();
   return (
     <View className="h-[70px] flex-row items-center gap-3 px-4">
       <Button variant="ghost"
@@ -67,20 +68,21 @@ export function SecretInput({
   onGenerate: () => void;
   placeholder: string;
 }) {
+  const { colors } = useAppTheme();
   return (
     <View className="gap-2">
       <View className="flex-row items-center justify-between">
-        <Label className="text-xs text-muted-foreground">Password</Label>
+        <Label className="text-xs text-muted-foreground">Mot de passe</Label>
         <Button variant="ghost" onPress={onGenerate} className="w-44" >
           <Sparkles size={14} color={colors.primary} />
-          <Text className="text-xs font-semibold text-primary">Generate secure</Text>
+          <Text className="text-xs font-semibold text-primary">Générer un mot de passe</Text>
         </Button>
       </View>
       <View className="flex-row items-center gap-2">
         <Input
-          label="Password"
+          label="Mot de passe"
           placeholder={placeholder}
-          right={<TextInput.Icon icon={visible ? "eye-off" : "eye"} onPress={onToggleVisible} accessibilityLabel={visible ? "Hide password" : "Show password"} />}
+          right={<TextInput.Icon icon={visible ? "eye-off" : "eye"} onPress={onToggleVisible} accessibilityLabel={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"} />}
           secureTextEntry={!visible}
           autoCapitalize="none"
           value={value}

@@ -24,10 +24,10 @@ module.exports = {
         ring: "#32BE51",
       },
       fontFamily: {
-        sans: ["Poppins_400Regular"],
-        medium: ["Poppins_500Medium"],
-        semibold: ["Poppins_600SemiBold"],
-        bold: ["Poppins_700Bold"],
+        sans: ["Outfit_400Regular"],
+        medium: ["Outfit_500Medium"],
+        semibold: ["Outfit_600SemiBold"],
+        bold: ["Outfit_700Bold"],
       },
       borderRadius: {
         sm: "6px",

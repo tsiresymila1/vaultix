@@ -14,9 +14,10 @@ import { Text } from "@/components/ui/text";
 import { useAuth } from "@/lib/auth";
 import { generatePassword } from "@/lib/crypto";
 import { updatePassword, usePasswords } from "@/lib/passwords";
-import { colors } from "@/lib/theme";
+import { useAppTheme } from "@/lib/theme";
 
 export default function EditPassword() {
+  const { colors } = useAppTheme();
   const dialog = useMaterialDialog();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session } = useAuth();
@@ -51,7 +52,7 @@ export default function EditPassword() {
   const onSave = async () => {
     if (!entry || !session) return;
     if (!title.trim()) {
-      dialog.alert("Missing information", "Title is required.");
+      dialog.alert("Informations manquantes", "Le titre est obligatoire.");
       return;
     }
     setSaving(true);
@@ -65,15 +66,15 @@ export default function EditPassword() {
       });
       router.back();
     } catch {
-      dialog.alert("Error", "Failed to update password.");
+      dialog.alert("Erreur", "Impossible de modifier le mot de passe.");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <FormScreenHeader title="Edit password" subtitle={entry?.title || "Update login details"} onBack={() => router.back()} />
+    <SafeAreaView className="flex-1 bg-background" style={{ backgroundColor: colors.background }} edges={["top"]}>
+      <FormScreenHeader title="Modifier l’identifiant" subtitle={entry?.title || "Mettre à jour les informations"} onBack={() => router.back()} />
 
       {loading && !entry ? (
         <View className="flex-1 items-center justify-center">
@@ -81,7 +82,7 @@ export default function EditPassword() {
         </View>
       ) : !entry ? (
         <View className="flex-1 items-center justify-center">
-          <Text className="text-muted-foreground">Password not found</Text>
+          <Text className="text-muted-foreground">Identifiant introuvable</Text>
         </View>
       ) : (
         <ScreenScroll
@@ -90,28 +91,28 @@ export default function EditPassword() {
           showsVerticalScrollIndicator={false}
         >
           <FadeIn>
-            <FormSection title="Login details">
-              <FormField label="Title">
+            <FormSection title="Détails de connexion">
+              <FormField label="Titre">
                 <Input value={title} onChangeText={setTitle} />
               </FormField>
-              <FormField label="Website">
+              <FormField label="Site web">
                 <Input autoCapitalize="none" keyboardType="url" value={url} onChangeText={setUrl} />
               </FormField>
-              <FormField label="Username or email">
+              <FormField label="Nom d’utilisateur ou e-mail">
                 <Input autoCapitalize="none" value={username} onChangeText={setUsername} />
               </FormField>
             </FormSection>
           </FadeIn>
 
           <FadeIn delay={60}>
-            <FormSection title="Security">
+            <FormSection title="Sécurité">
               <SecretInput
                 value={password}
                 onChangeText={setPassword}
                 visible={show}
                 onToggleVisible={() => setShow((value) => !value)}
                 onGenerate={onGenerate}
-                placeholder="Leave blank to keep current"
+                placeholder="Laisser vide pour conserver le mot de passe actuel"
               />
             </FormSection>
           </FadeIn>
@@ -130,10 +131,10 @@ export default function EditPassword() {
           <View>
             <Button loading={saving} onPress={onSave} disabled={!title.trim()}>
               <Save size={18} color={colors.primaryForeground} />
-              <Text>Save changes</Text>
+              <Text>Enregistrer les modifications</Text>
             </Button>
             {password ? (
-              <Text className="mt-3 text-center text-xs text-warning">The account password will be replaced</Text>
+              <Text className="mt-3 text-center text-xs text-warning">Le mot de passe du compte sera remplacé</Text>
             ) : null}
           </View>
         </ScreenScroll>

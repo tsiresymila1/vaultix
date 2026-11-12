@@ -10,23 +10,24 @@ import { StaggerItem } from "@/components/motion";
 import { ScreenHeader, SectionHeader } from "@/components/screen-header";
 import { ListRow } from "@/components/ui/list-row";
 import { Text } from "@/components/ui/text";
-import { colors } from "@/lib/theme";
+import { useAppTheme } from "@/lib/theme";
 import { useVaults, type MobileVault } from "@/lib/vaults";
 
 export default function VaultixHome() {
   const dialog = useMaterialDialog();
+  const { colors } = useAppTheme();
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = async () => { setRefreshing(true); try { await refresh(); } catch { dialog.alert("Actualisation impossible", "Vérifiez votre connexion et réessayez."); } finally { setRefreshing(false); } };
   const { vaults, loading, error, refresh } = useVaults();
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" style={{ backgroundColor: colors.background }} edges={["top"]}>
       <ScreenScroll
           refreshing={refreshing} onRefresh={onRefresh}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 24 }}
       >
-        <ScreenHeader title="Coffres" />
+        <ScreenHeader eyebrow="ORGANISATION" title="Coffres" subtitle="Vos espaces de confiance" />
         <View className="mt-8 px-6">
           <SectionHeader title="Projets" />
           {loading && vaults.length === 0 ? (
@@ -44,7 +45,7 @@ export default function VaultixHome() {
               <Text className="mt-1 text-xs text-muted-foreground">Vos coffres de projet apparaîtront ici</Text>
             </View>
           ) : (
-            <View className="overflow-hidden rounded-2xl bg-card px-4">
+            <View className="overflow-hidden rounded-2xl px-4" style={{ backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }}>
               {vaults.map((vault, index) => (
                 <StaggerItem key={vault.id} index={index}>
                   <VaultRow vault={vault} last={index === vaults.length - 1} />
@@ -61,6 +62,7 @@ export default function VaultixHome() {
 }
 
 function VaultRow({ vault, last }: { vault: MobileVault; last: boolean }) {
+  const { colors } = useAppTheme();
   const router = useRouter();
   const visibleEnvironments = vault.environments.slice(0, 2);
   const remainingEnvironments = vault.environments.length - visibleEnvironments.length;

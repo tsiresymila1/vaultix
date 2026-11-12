@@ -2,9 +2,11 @@ import * as React from "react";
 import { View, type ViewProps } from "react-native";
 import { Text } from "./text";
 import { cn } from "@/lib/utils";
+import { useAppTheme } from "@/lib/theme";
 
-function Card({ className, ...props }: ViewProps) {
-  return <View className={cn("rounded-md border border-border bg-card", className)} {...props} />;
+function Card({ className, style, ...props }: ViewProps) {
+  const { colors } = useAppTheme();
+  return <View className={cn("rounded-2xl border border-border bg-card", className)} style={[{ backgroundColor: colors.card, borderColor: colors.border }, style]} {...props} />;
 }
 
 function CardHeader({ className, ...props }: ViewProps) {
